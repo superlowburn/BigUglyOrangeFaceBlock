@@ -534,24 +534,35 @@ test("withholds provider requests until one exact trusted reveal and re-protecti
   }
 });
 
-test("Trusted provider frames authorize and navigate once without looping", async () => {
-  const extension = await launchExtension({ providerFixtureUrls: videoProviderUrls });
+test("Trusted provider frame reloads its exact original source once without looping", async () => {
+  const extension = await launchExtension({ providerFixtureUrls: [youtubeFixtureUrl] });
   const { page, worker } = extension;
   try {
     await setMode(worker, "trusted");
     extension.allowProviderAssets();
-    await page.goto(`${fixtureOrigin}/video.html`);
-    await expect.poll(() => extension.providerRequests).toHaveLength(3);
+    await page.goto(`${fixtureOrigin}/article.html`);
+    await page.evaluate((source) => {
+      const frame = document.createElement("iframe");
+      frame.id = "trusted-provider";
+      frame.src = source;
+      document.body.append(frame);
+    }, youtubeFixtureUrl);
+    const trustedProvider = page.locator("#trusted-provider");
+    await expect(trustedProvider).toHaveAttribute("src", /eg_eclipse_goggles=/u);
+    const firstSource = await trustedProvider.getAttribute("src");
     await page.waitForTimeout(500);
 
-    expect(extension.providerRequests).toHaveLength(3);
-    expect(new Set(extension.providerRequests.map((source) =>
-      new URL(source).searchParams.get("eg_eclipse_goggles"),
-    )).size).toBe(3);
-    for (const id of ["youtube", "youtube-twin", "vimeo"]) {
-      const visibleSource = await page.locator(`#${id}`).getAttribute("src");
-      expect(visibleSource).toContain("eg_eclipse_goggles");
-    }
+    expect(await trustedProvider.getAttribute("src")).toBe(firstSource);
+    await trustedProvider.evaluate((frame, source) => {
+      frame.setAttribute("src", source);
+    }, youtubeFixtureUrl);
+    await expect.poll(() => trustedProvider.getAttribute("src")).not.toBe(firstSource);
+    await expect(trustedProvider).toHaveAttribute("src", /eg_eclipse_goggles=/u);
+    const secondSource = await trustedProvider.getAttribute("src");
+    await page.waitForTimeout(500);
+
+    expect(secondSource).not.toBe(firstSource);
+    expect(await trustedProvider.getAttribute("src")).toBe(secondSource);
   } finally {
     await closeExtension(extension);
   }

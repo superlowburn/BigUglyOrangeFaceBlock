@@ -144,6 +144,22 @@ describe("ProviderFrameController", () => {
     expect(element.getAttribute("src")).toContain("eg_eclipse_goggles=unit-token");
   });
 
+  it("re-authorizes one Trusted iframe when the page resets its exact original source", async () => {
+    const access = authorization();
+    const browser = navigation();
+    const controller = new ProviderFrameController(access, browser);
+    const originalSource = "https://www.youtube.com/embed/first?autoplay=1";
+    const element = frame(originalSource);
+    await controller.trust(element);
+
+    element.setAttribute("src", originalSource);
+    await controller.trust(element);
+    await controller.trust(element);
+
+    expect(access.authorize).toHaveBeenCalledTimes(2);
+    expect(browser.navigate).toHaveBeenCalledTimes(2);
+  });
+
   it("revokes the grant when selected browsing-context navigation fails", async () => {
     const access = authorization();
     const controller = new ProviderFrameController(access, {

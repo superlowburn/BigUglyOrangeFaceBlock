@@ -130,7 +130,7 @@ beforeEach(() => {
 });
 
 describe("ContentController", () => {
-  it("observes Trusted mode only to authorize dynamic provider frames without protection", () => {
+  it("observes Trusted mode only to allow dynamic provider frames without protection", () => {
     const image = document.createElement("img");
     const frame = document.createElement("iframe");
     frame.src = "https://www.youtube.com/embed/trusted-dynamic";
@@ -226,7 +226,7 @@ describe("ContentController", () => {
     expect(harness.providerFrames.regate).toHaveBeenCalledWith(frame);
   });
 
-  it("re-protects and emits only a sanitized diagnostic when provider authorization fails", async () => {
+  it("re-protects and emits only a sanitized diagnostic when a provider allow rule fails", async () => {
     const frame = document.createElement("iframe");
     frame.src = "https://www.youtube.com/embed/private-video";
     document.body.append(frame);
@@ -250,7 +250,7 @@ describe("ContentController", () => {
 
     await vi.waitFor(() => expect(harness.renderer.items[0]?.handle.isRevealed()).toBe(false));
     expect(providerFrames.regate).toHaveBeenCalledWith(frame);
-    expect(log).toHaveBeenCalledWith("IFRAME", "provider authorization failed");
+    expect(log).toHaveBeenCalledWith("IFRAME", "provider allow rule failed");
     expect(JSON.stringify(log.mock.calls)).not.toContain("secret");
   });
 
@@ -281,7 +281,7 @@ describe("ContentController", () => {
     expect(harness.providerFrames.restore).toHaveBeenCalledWith(frame);
   });
 
-  it("forgets provider state without restore authorization during page teardown", () => {
+  it("forgets provider state without a restore allow rule during page teardown", () => {
     const frame = document.createElement("iframe");
     document.body.append(frame);
     const harness = controllerHarness(

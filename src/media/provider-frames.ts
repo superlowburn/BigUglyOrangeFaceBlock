@@ -112,7 +112,7 @@ export class ProviderFrameController {
       return;
     }
     if (!isSupportedVideoFrame(frame)) return;
-    if (state?.originalSource === originalSource) {
+    if (state?.originalSource === originalSource && state.inflight) {
       await state.inflight;
       return;
     }

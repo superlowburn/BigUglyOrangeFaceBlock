@@ -352,7 +352,7 @@ export class ContentController {
 
   private reportProviderFailure(element: Element): void {
     if (!this.development) return;
-    this.logDiagnostic(element.tagName, "provider authorization failed");
+    this.logDiagnostic(element.tagName, "provider allow rule failed");
   }
 }
 
