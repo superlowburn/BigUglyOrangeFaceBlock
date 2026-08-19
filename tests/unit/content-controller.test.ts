@@ -310,6 +310,39 @@ describe("ContentController", () => {
     expect(JSON.stringify(log.mock.calls)).not.toContain("<img");
   });
 
+  it("uses the browser development build flag for default sanitized diagnostics", () => {
+    const broken = document.createElement("img");
+    broken.alt = "private alt";
+    broken.src = "https://private.example/secret.png";
+    document.body.append(broken);
+    const observer = new FakeDocumentObserver();
+    const renderer = rendererHarness();
+    const log = vi.fn();
+    vi.stubGlobal("process", undefined);
+
+    try {
+      const controller = new ContentController({
+        document,
+        observer,
+        renderer,
+        classify: () => {
+          throw new Error("bad https://private.example/secret.png <img alt='private alt'>");
+        },
+        logDiagnostic: log,
+      });
+      controller.start({ origin: "https://news.example", mode: "protected" });
+
+      observer.emit([broken]);
+
+      expect(log).toHaveBeenCalledWith("IMG", "candidate processing failed");
+      expect(JSON.stringify(log.mock.calls)).not.toContain("private");
+      expect(JSON.stringify(log.mock.calls)).not.toContain("https://");
+      expect(JSON.stringify(log.mock.calls)).not.toContain("<img");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("restores native state when attribute reclassification fails and continues the batch", () => {
     const brokenVideo = document.createElement("video");
     const healthyImage = document.createElement("img");

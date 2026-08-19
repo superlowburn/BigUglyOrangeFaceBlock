@@ -14,6 +14,8 @@ import type {
 } from "../shared/media-types";
 import { DocumentObserver } from "./document-observer";
 
+declare const __DEV__: boolean;
+
 export interface DocumentObserverPort {
   start(onCandidates: (elements: readonly Element[]) => void): void;
   scan(root: ParentNode): void;
@@ -314,7 +316,7 @@ export class ContentController {
 }
 
 function isDevelopmentRuntime(): boolean {
-  return typeof process !== "undefined" && process.env.NODE_ENV !== "production";
+  return typeof __DEV__ !== "undefined" && __DEV__;
 }
 
 function replaceSource(frame: HTMLIFrameElement, source: string | null): void {

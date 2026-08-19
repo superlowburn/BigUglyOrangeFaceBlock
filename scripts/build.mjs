@@ -1,6 +1,8 @@
 import { cp, mkdir, rm } from "node:fs/promises";
 import { build } from "esbuild";
 
+const development = process.env.NODE_ENV === "development";
+
 await rm("dist", { recursive: true, force: true });
 await mkdir("dist/popup", { recursive: true });
 
@@ -16,6 +18,7 @@ await Promise.all([
   platform: "browser",
   target: "chrome120",
   sourcemap: true,
+  define: { __DEV__: JSON.stringify(development) },
 })));
 
 await Promise.all([
