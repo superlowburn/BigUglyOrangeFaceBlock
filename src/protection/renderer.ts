@@ -43,7 +43,7 @@ interface ProtectionRecord {
 
 export function isTrustedActivation(event: Event): boolean {
   if (!event.isTrusted) return false;
-  if (event.type === "click" || event.type === "pointerup") return true;
+  if (event.type === "click") return true;
   if (event.type !== "keydown") return false;
 
   const key = (event as KeyboardEvent).key;
@@ -58,6 +58,7 @@ export class ProtectionRenderer {
   private readonly trustedActivation: (event: Event) => boolean;
   private readonly createStrictGuard: () => Pick<StrictRevealGuard, "watch">;
   private readonly records = new Map<HTMLElement, ProtectionRecord>();
+  private readonly dirtyRecords = new Set<ProtectionRecord>();
   private host: HTMLElement | null = null;
   private shadow: ShadowRoot | null = null;
   private frame: number | null = null;
@@ -88,7 +89,7 @@ export class ProtectionRenderer {
       reveal: () => this.reveal(record),
       reprotect: () => this.reprotect(record),
       remove: () => this.remove(record),
-      update: () => this.updateRecord(record),
+      update: () => this.scheduleRecordUpdate(record),
       isRevealed: () => record.revealed,
     };
 
@@ -108,7 +109,6 @@ export class ProtectionRenderer {
     };
 
     layer.addEventListener("click", (event) => this.activate(record, event));
-    layer.addEventListener("pointerup", (event) => this.activate(record, event));
     layer.addEventListener("keydown", (event) => this.activate(record, event));
     candidate.element.addEventListener("mouseenter", record.onMouseEnter);
     candidate.element.addEventListener("mouseleave", record.onMouseLeave);
@@ -242,18 +242,31 @@ export class ProtectionRenderer {
     record.layer.classList.toggle("eg-compact", compact);
   }
 
-  private scheduleUpdate = (): void => {
+  private scheduleRecordUpdate(record: ProtectionRecord): void {
+    if (record.removed) return;
+    this.dirtyRecords.add(record);
+    this.scheduleFrame();
+  }
+
+  private scheduleAllUpdates = (): void => {
+    for (const record of this.records.values()) this.dirtyRecords.add(record);
+    this.scheduleFrame();
+  };
+
+  private scheduleFrame(): void {
     if (this.frame !== null) return;
     this.frame = this.requestFrame(() => {
       this.frame = null;
-      for (const record of this.records.values()) this.updateRecord(record);
+      const records = [...this.dirtyRecords];
+      this.dirtyRecords.clear();
+      for (const record of records) this.updateRecord(record);
     });
-  };
+  }
 
   private startListening(): void {
     if (this.listening) return;
-    this.window.addEventListener("scroll", this.scheduleUpdate, true);
-    this.window.addEventListener("resize", this.scheduleUpdate);
+    this.window.addEventListener("scroll", this.scheduleAllUpdates, true);
+    this.window.addEventListener("resize", this.scheduleAllUpdates);
     this.listening = true;
   }
 
@@ -262,14 +275,15 @@ export class ProtectionRenderer {
     record.removed = true;
     record.stopStrictWatch?.();
     record.stopStrictWatch = null;
+    this.dirtyRecords.delete(record);
     record.layer.remove();
     record.candidate.element.removeEventListener("mouseenter", record.onMouseEnter);
     record.candidate.element.removeEventListener("mouseleave", record.onMouseLeave);
     if (this.records.get(record.candidate.element) === record) this.records.delete(record.candidate.element);
 
     if (this.records.size > 0) return;
-    this.window.removeEventListener("scroll", this.scheduleUpdate, true);
-    this.window.removeEventListener("resize", this.scheduleUpdate);
+    this.window.removeEventListener("scroll", this.scheduleAllUpdates, true);
+    this.window.removeEventListener("resize", this.scheduleAllUpdates);
     this.listening = false;
     if (this.frame !== null) this.cancelFrame(this.frame);
     this.frame = null;

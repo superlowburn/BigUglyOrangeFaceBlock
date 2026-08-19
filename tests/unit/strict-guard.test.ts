@@ -7,6 +7,7 @@ import {
 function observerHarness(): {
   factory: IntersectionObserverFactory;
   emit: (target: Element, intersectionRatio: number) => void;
+  emitMany: (entries: Array<{ target: Element; intersectionRatio: number }>) => void;
   observe: ReturnType<typeof vi.fn>;
   disconnect: ReturnType<typeof vi.fn>;
 } {
@@ -14,19 +15,25 @@ function observerHarness(): {
   const observe = vi.fn();
   const disconnect = vi.fn();
   const observer = { observe, disconnect };
+  const deliver = (entries: Array<{ target: Element; intersectionRatio: number }>) => {
+    if (!callback) throw new Error("observer callback was not registered");
+    callback(
+      entries.map(({ target, intersectionRatio }) => ({
+        target,
+        intersectionRatio,
+        isIntersecting: intersectionRatio > 0,
+      }) as IntersectionObserverEntry),
+      observer as unknown as IntersectionObserver,
+    );
+  };
 
   return {
     factory: (nextCallback) => {
       callback = nextCallback;
       return observer;
     },
-    emit: (target, intersectionRatio) => {
-      if (!callback) throw new Error("observer callback was not registered");
-      callback(
-        [{ target, intersectionRatio, isIntersecting: intersectionRatio > 0 } as IntersectionObserverEntry],
-        observer as unknown as IntersectionObserver,
-      );
-    },
+    emit: (target, intersectionRatio) => deliver([{ target, intersectionRatio }]),
+    emitMany: deliver,
     observe,
     disconnect,
   };
@@ -75,6 +82,21 @@ describe("StrictRevealGuard", () => {
     vi.advanceTimersByTime(1_999);
     harness.emit(element, 0.01);
     vi.advanceTimersByTime(10_000);
+
+    expect(reprotect).not.toHaveBeenCalled();
+  });
+
+  it("uses a later re-entry when exit and re-entry arrive in one observer callback", () => {
+    const harness = observerHarness();
+    const element = document.createElement("img");
+    const reprotect = vi.fn();
+    new StrictRevealGuard({ createObserver: harness.factory }).watch(element, reprotect);
+
+    harness.emitMany([
+      { target: element, intersectionRatio: 0 },
+      { target: element, intersectionRatio: 0.01 },
+    ]);
+    vi.advanceTimersByTime(2_000);
 
     expect(reprotect).not.toHaveBeenCalled();
   });

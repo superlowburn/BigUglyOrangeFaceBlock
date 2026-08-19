@@ -127,6 +127,31 @@ describe("ProtectionRenderer", () => {
     expect(handle.isRevealed()).toBe(false);
   });
 
+  it("ignores trusted pointerup and reveals on trusted click through the activation seam", () => {
+    const image = document.createElement("img");
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(0, 0, 640, 360));
+    document.body.append(image);
+    const onReveal = vi.fn();
+    const renderer = new ProtectionRenderer({
+      trustedActivation: (event) =>
+        isTrustedActivation({
+          type: event.type,
+          key: event instanceof KeyboardEvent ? event.key : undefined,
+          isTrusted: true,
+        } as unknown as Event),
+    });
+    const handle = protect(renderer, image, { onReveal });
+    const layer = renderer.debugLayerFor(image);
+
+    layer?.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+    expect(onReveal).not.toHaveBeenCalled();
+    expect(handle.isRevealed()).toBe(false);
+
+    layer?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(onReveal).toHaveBeenCalledTimes(1);
+    expect(handle.isRevealed()).toBe(true);
+  });
+
   it("re-protects only the item whose compact control is activated", () => {
     const first = document.createElement("img");
     const second = document.createElement("img");
@@ -176,6 +201,30 @@ describe("ProtectionRenderer", () => {
     expect(renderer.debugLayerFor(image)?.style.height).toBe("280px");
   });
 
+  it("deduplicates repeated public updates and applies the latest rectangle after the frame", () => {
+    const frames = frameQueue();
+    const image = document.createElement("img");
+    const box = vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(20, 30, 640, 360));
+    document.body.append(image);
+    const renderer = new ProtectionRenderer(frames.environment);
+    const handle = protect(renderer, image);
+
+    box.mockReturnValue(rect(45, 55, 500, 280));
+    handle.update();
+    box.mockReturnValue(rect(80, 90, 420, 240));
+    handle.update();
+
+    expect(frames.pending()).toBe(1);
+    expect(box).toHaveBeenCalledTimes(1);
+    expect(renderer.debugLayerFor(image)?.style.left).toBe("20px");
+    frames.flush();
+    expect(box).toHaveBeenCalledTimes(2);
+    expect(renderer.debugLayerFor(image)?.style.left).toBe("80px");
+    expect(renderer.debugLayerFor(image)?.style.top).toBe("90px");
+    expect(renderer.debugLayerFor(image)?.style.width).toBe("420px");
+    expect(renderer.debugLayerFor(image)?.style.height).toBe("240px");
+  });
+
   it("uses compact copy and preserves the full description as its accessible label", () => {
     const image = document.createElement("img");
     vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(0, 0, 159, 89));
@@ -191,14 +240,16 @@ describe("ProtectionRenderer", () => {
   });
 
   it("switches to compact controls when an updated media rectangle becomes small", () => {
+    const frames = frameQueue();
     const image = document.createElement("img");
     const box = vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(0, 0, 640, 360));
     document.body.append(image);
-    const renderer = new ProtectionRenderer();
+    const renderer = new ProtectionRenderer(frames.environment);
     const handle = protect(renderer, image);
 
     box.mockReturnValue(rect(0, 0, 159, 89));
     handle.update();
+    frames.flush();
 
     const button = renderer.debugLayerFor(image)?.querySelector<HTMLButtonElement>("button");
     expect(button?.textContent).toBe("Reveal image");
@@ -243,6 +294,7 @@ describe("isTrustedActivation", () => {
     expect(isTrustedActivation({ type: "keydown", key: "Enter", isTrusted: true } as KeyboardEvent)).toBe(true);
     expect(isTrustedActivation({ type: "keydown", key: " ", isTrusted: true } as KeyboardEvent)).toBe(true);
     expect(isTrustedActivation({ type: "click", isTrusted: false } as Event)).toBe(false);
+    expect(isTrustedActivation({ type: "pointerup", isTrusted: true } as Event)).toBe(false);
     expect(isTrustedActivation({ type: "keydown", key: "Escape", isTrusted: true } as KeyboardEvent)).toBe(false);
   });
 });

@@ -39,21 +39,21 @@ export class StrictRevealGuard {
 
     const observer = this.createObserver((entries) => {
       if (disposed) return;
-      const entry = entries.find((candidate) => candidate.target === element);
-      if (!entry) return;
+      for (const entry of entries) {
+        if (entry.target !== element) continue;
+        if (entry.intersectionRatio > 0) {
+          outside = false;
+          clearPending();
+          continue;
+        }
 
-      if (entry.intersectionRatio > 0) {
-        outside = false;
-        clearPending();
-        return;
+        if (outside) continue;
+        outside = true;
+        timer = this.setTimer(() => {
+          timer = null;
+          if (!disposed && outside) reprotect();
+        }, 2_000);
       }
-
-      if (outside) return;
-      outside = true;
-      timer = this.setTimer(() => {
-        timer = null;
-        if (!disposed && outside) reprotect();
-      }, 2_000);
     });
 
     observer.observe(element);
