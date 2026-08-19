@@ -83,7 +83,6 @@ function isRendered(
     const style = env.style(current);
     if (
       current.hidden ||
-      current.getAttribute("aria-hidden") === "true" ||
       style.display === "none" ||
       style.visibility === "hidden" ||
       style.visibility === "collapse" ||

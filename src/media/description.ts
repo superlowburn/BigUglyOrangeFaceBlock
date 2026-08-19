@@ -22,8 +22,14 @@ export function resolveDescription(candidate: MediaCandidate): string {
 
 function labelledBy(element: HTMLElement): string {
   const ids = element.getAttribute("aria-labelledby")?.split(/\s+/u).filter(Boolean) ?? [];
+  const root = element.getRootNode();
   return normalize(ids
-    .map((id) => element.ownerDocument.getElementById(id)?.textContent ?? "")
+    .map((id) => {
+      if (root instanceof Document || root instanceof ShadowRoot) {
+        return root.getElementById(id)?.textContent ?? "";
+      }
+      return "";
+    })
     .filter(Boolean)
     .join(" "));
 }

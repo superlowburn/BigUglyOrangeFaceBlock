@@ -46,6 +46,7 @@ interface ProviderFramePort {
   restore(frame: HTMLIFrameElement): void | Promise<void>;
   trust?(frame: HTMLIFrameElement): void | Promise<void>;
   forget?(frame: HTMLIFrameElement): void;
+  dispose?(): void;
 }
 
 export interface ContentControllerDependencies {
@@ -147,9 +148,10 @@ export class ContentController {
     }
   }
 
-  stop(): void {
+  stop(options: { restoreMedia?: boolean } = {}): void {
     this.stopObservation();
-    this.clearProtection();
+    this.clearProtection(options.restoreMedia ?? true);
+    if (options.restoreMedia === false) this.providerFrames.dispose?.();
     this.mode = "trusted";
     this.started = false;
   }
@@ -238,7 +240,12 @@ export class ContentController {
       const handle = this.renderer.protect(candidate, {
         description: this.describe(candidate),
         mode: this.mode,
-        onReveal: () => this.releaseRecord(record),
+        onReveal: () => {
+          void this.releaseRecord(record).catch(() => {
+            record.handle.reprotect();
+            this.reportProviderFailure(candidate.element);
+          });
+        },
         onReprotect: () => this.enforceRecord(record),
       });
       record = { candidate, handle };
@@ -325,13 +332,27 @@ export class ContentController {
     if (restore) this.restoreMedia(record.candidate);
   }
 
-  private clearProtection(): void {
-    for (const record of [...this.records]) this.detachRecord(record, true);
+  private clearProtection(restore = true): void {
+    for (const record of [...this.records]) {
+      this.detachRecord(record, restore);
+      if (
+        !restore &&
+        record.candidate.kind === "video-iframe" &&
+        record.candidate.element instanceof HTMLIFrameElement
+      ) {
+        this.providerFrames.forget?.(record.candidate.element);
+      }
+    }
   }
 
   private reportCandidateFailure(element: Element): void {
     if (!this.development) return;
     this.logDiagnostic(element.tagName, "candidate processing failed");
+  }
+
+  private reportProviderFailure(element: Element): void {
+    if (!this.development) return;
+    this.logDiagnostic(element.tagName, "provider authorization failed");
   }
 }
 

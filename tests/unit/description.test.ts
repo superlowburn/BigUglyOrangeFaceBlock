@@ -35,6 +35,21 @@ describe("resolveDescription", () => {
     expect(description).not.toContain("Fallback label");
   });
 
+  it("resolves aria-labelledby within the element's open shadow root", () => {
+    const host = document.createElement("section");
+    const shadow = host.attachShadow({ mode: "open" });
+    const label = document.createElement("span");
+    label.id = "shadow-label";
+    label.textContent = "  Shadow moonrise  ";
+    const element = document.createElement("img");
+    element.setAttribute("aria-labelledby", "shadow-label");
+    element.setAttribute("aria-label", "Wrong document fallback");
+    shadow.append(label, element);
+    document.body.append(host);
+
+    expect(resolveDescription(candidate(element))).toBe("Shadow moonrise");
+  });
+
   it("uses a closest figure caption when alt text is missing", () => {
     const figure = document.createElement("figure");
     const element = document.createElement("img");

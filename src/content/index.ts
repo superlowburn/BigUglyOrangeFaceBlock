@@ -5,7 +5,7 @@ import { ContentController } from "./content-controller";
 interface ContentControllerPort {
   start(context: PolicyContext): void;
   applyMode(mode: SiteMode): void;
-  stop(): void;
+  stop(options?: { restoreMedia?: boolean }): void;
 }
 
 interface ParentLocation {
@@ -37,7 +37,7 @@ export async function bootstrapContentScript(
   dependencies.addPageHideListener(() => {
     disposed = true;
     stopWatching?.();
-    controller.stop();
+    controller.stop({ restoreMedia: false });
   });
 
   try {

@@ -91,6 +91,8 @@ function controllerHarness(
     regate: vi.fn(),
     restore: vi.fn(),
     trust: vi.fn(),
+    forget: vi.fn(),
+    dispose: vi.fn(),
   };
   const classify = vi.fn((element: Element) => classifications.get(element) ?? null);
   const resolveDescription = vi.fn((media: MediaCandidate) => `Description for ${media.kind}`);
@@ -224,6 +226,34 @@ describe("ContentController", () => {
     expect(harness.providerFrames.regate).toHaveBeenCalledWith(frame);
   });
 
+  it("re-protects and emits only a sanitized diagnostic when provider authorization fails", async () => {
+    const frame = document.createElement("iframe");
+    frame.src = "https://www.youtube.com/embed/private-video";
+    document.body.append(frame);
+    const log = vi.fn();
+    const providerFrames = {
+      gate: vi.fn(),
+      release: vi.fn().mockRejectedValue(new Error("secret provider URL failed")),
+      regate: vi.fn(),
+      restore: vi.fn(),
+      trust: vi.fn(),
+      forget: vi.fn(),
+    };
+    const harness = controllerHarness(
+      new Map([[frame, candidate(frame, "video-iframe")]]),
+      { providerFrames, development: true, logDiagnostic: log },
+    );
+    harness.controller.start({ origin: "https://news.example", mode: "protected" });
+    harness.observer.emit([frame]);
+
+    harness.renderer.items[0]?.handle.reveal();
+
+    await vi.waitFor(() => expect(harness.renderer.items[0]?.handle.isRevealed()).toBe(false));
+    expect(providerFrames.regate).toHaveBeenCalledWith(frame);
+    expect(log).toHaveBeenCalledWith("IFRAME", "provider authorization failed");
+    expect(JSON.stringify(log.mock.calls)).not.toContain("secret");
+  });
+
   it("switching to Trusted removes layers and restores native and provider state", () => {
     const image = document.createElement("img");
     const video = document.createElement("video");
@@ -249,6 +279,36 @@ describe("ContentController", () => {
     );
     expect(harness.nativeVideo.restore).toHaveBeenCalledWith(video);
     expect(harness.providerFrames.restore).toHaveBeenCalledWith(frame);
+  });
+
+  it("forgets provider state without restore authorization during page teardown", () => {
+    const frame = document.createElement("iframe");
+    document.body.append(frame);
+    const harness = controllerHarness(
+      new Map([[frame, candidate(frame, "video-iframe")]]),
+    );
+    harness.controller.start({ origin: "https://news.example", mode: "protected" });
+    harness.observer.emit([frame]);
+
+    harness.controller.stop({ restoreMedia: false });
+
+    expect(harness.providerFrames.forget).toHaveBeenCalledWith(frame);
+    expect(harness.providerFrames.restore).not.toHaveBeenCalled();
+    expect(harness.providerFrames.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("disposes Trusted provider state during page teardown", () => {
+    const frame = document.createElement("iframe");
+    frame.src = "https://www.youtube.com/embed/trusted";
+    document.body.append(frame);
+    const harness = controllerHarness();
+    harness.controller.start({ origin: "https://news.example", mode: "trusted" });
+    harness.observer.emit([frame]);
+
+    harness.controller.stop({ restoreMedia: false });
+
+    expect(harness.providerFrames.dispose).toHaveBeenCalledTimes(1);
+    expect(harness.providerFrames.restore).not.toHaveBeenCalled();
   });
 
   it("rebuilds existing handles immediately when Protected changes to Strict", () => {
@@ -379,6 +439,7 @@ describe("ContentController", () => {
     frame.setAttribute("src", "https://www.youtube.com/embed/first?start=10#one");
     document.body.append(frame);
     const media = candidate(frame, "video-iframe");
+    const navigate = vi.fn();
     const realProviderFrames = new ProviderFrameController({
       authorize: async (source, disableAutoplay) => {
         const url = new URL(source);
@@ -387,13 +448,16 @@ describe("ContentController", () => {
         return { grantId: 91, source: url.href };
       },
       revoke: vi.fn().mockResolvedValue(undefined),
+    }, {
+      prepare: vi.fn().mockResolvedValue(undefined),
+      navigate,
     });
     const harness = controllerHarness(new Map([[frame, media]]), {
       providerFrames: realProviderFrames,
     });
     harness.controller.start({ origin: "https://news.example", mode: "protected" });
     harness.observer.emit([frame]);
-    expect(frame.getAttribute("src")).toBe("about:blank");
+    expect(frame.getAttribute("src")).toBe("https://www.youtube.com/embed/first?start=10#one");
 
     const replacement = "https://player.vimeo.com/video/456?autoplay=0#two";
     frame.setAttribute("src", replacement);
@@ -401,14 +465,16 @@ describe("ContentController", () => {
 
     expect(harness.renderer.items[0]?.handle.remove).toHaveBeenCalledTimes(1);
     expect(harness.renderer.protect).toHaveBeenCalledTimes(2);
-    expect(frame.getAttribute("src")).toBe("about:blank");
+    expect(frame.getAttribute("src")).toBe(replacement);
     harness.renderer.items[1]?.handle.reveal();
     await vi.waitFor(() => {
-      const released = new URL(frame.getAttribute("src")!);
+      expect(navigate).toHaveBeenCalledTimes(1);
+      const released = new URL(navigate.mock.calls[0]![1]);
       expect(released.origin + released.pathname).toBe("https://player.vimeo.com/video/456");
       expect(released.searchParams.get("autoplay")).toBe("0");
       expect(released.searchParams.get("eg_eclipse_goggles")).toBe("controller-token");
       expect(released.hash).toBe("#two");
+      expect(frame.getAttribute("src")).toBe(replacement);
     });
   });
 });
@@ -538,7 +604,7 @@ describe("content-script bootstrap", () => {
     expect(harness.controller.start).not.toHaveBeenCalled();
   });
 
-  it("stops policy watching and the controller on pagehide", async () => {
+  it("stops policy watching and discards provider grants without restoring on pagehide", async () => {
     const stopWatching = vi.fn();
     const harness = bootstrapHarness({ watchPolicy: vi.fn(() => stopWatching) });
     await bootstrapContentScript(harness.dependencies);
@@ -549,7 +615,7 @@ describe("content-script bootstrap", () => {
     onPageHide?.();
 
     expect(stopWatching).toHaveBeenCalledTimes(1);
-    expect(harness.controller.stop).toHaveBeenCalledTimes(1);
+    expect(harness.controller.stop).toHaveBeenCalledWith({ restoreMedia: false });
   });
 
   it("does not start after pagehide wins a pending policy lookup", async () => {
@@ -567,7 +633,7 @@ describe("content-script bootstrap", () => {
     resolvePolicy({ origin: "https://top.example", mode: "strict" });
     await bootstrap;
 
-    expect(harness.controller.stop).toHaveBeenCalledTimes(1);
+    expect(harness.controller.stop).toHaveBeenCalledWith({ restoreMedia: false });
     expect(harness.controller.start).not.toHaveBeenCalled();
     expect(harness.watchPolicy).not.toHaveBeenCalled();
   });

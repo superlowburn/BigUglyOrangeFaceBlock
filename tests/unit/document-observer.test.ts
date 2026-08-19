@@ -273,6 +273,28 @@ describe("DocumentObserver", () => {
     expect(onCandidates.mock.calls.flatMap(([elements]) => elements)).toContain(dynamicImage);
   });
 
+  it("discovers an open shadow root attached after its host is already connected", async () => {
+    const frames = frameQueue();
+    const observer = new DocumentObserver({
+      ...frames.environment,
+      createResizeObserver: () => ({ observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn() }),
+    });
+    const onCandidates = vi.fn();
+    observer.start(onCandidates);
+    const host = document.createElement("div");
+    document.body.append(host);
+    await deliverMutations();
+    frames.flush();
+    onCandidates.mockClear();
+
+    const image = document.createElement("img");
+    host.attachShadow({ mode: "open" }).append(image);
+    host.dispatchEvent(new CustomEvent("eclipse-goggles-open-shadow", { bubbles: true }));
+    frames.flush();
+
+    expect(onCandidates.mock.calls.flatMap(([elements]) => elements)).toContain(image);
+  });
+
   it("reconsiders tracked elements after resize without marking an attribute change", () => {
     const frames = frameQueue();
     let resizeCallback: ResizeObserverCallback = () => undefined;

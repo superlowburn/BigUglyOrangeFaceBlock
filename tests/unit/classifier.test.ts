@@ -158,6 +158,20 @@ describe("classifyElement", () => {
     expect(classifyElement(element, env)).toMatchObject({ kind: "background-image" });
   });
 
+  it("treats visually rendered aria-hidden text as visible", () => {
+    const { env, setBox, setBackground } = environment();
+    const element = document.createElement("div");
+    const visible = document.createElement("span");
+    visible.setAttribute("aria-hidden", "true");
+    visible.textContent = "Visible decorative headline";
+    element.append(visible);
+    setBox(element, 640, 360);
+    setBox(visible, 300, 40);
+    setBackground(element, 'url("hero.jpg")');
+
+    expect(classifyElement(element, env)).toBeNull();
+  });
+
   it("ignores a CSS background that contains a control", () => {
     const { env, setBox, setBackground } = environment();
     const element = document.createElement("div");

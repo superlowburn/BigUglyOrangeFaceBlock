@@ -30,8 +30,11 @@ export function supportedProviderUrl(source: string, base = "https://invalid.loc
 
 interface ProviderFrameState {
   originalSource: string;
+  authorizedSource?: string;
   grantId?: number;
   version: number;
+  inflight?: Promise<void>;
+  ready?: Promise<void>;
 }
 
 interface ProviderAuthorizationPort {
@@ -42,17 +45,27 @@ interface ProviderAuthorizationPort {
   revoke(grantId: number): Promise<void>;
 }
 
+interface ProviderFrameEnvironment {
+  prepare(frame: HTMLIFrameElement): Promise<void>;
+  navigate(frame: HTMLIFrameElement, source: string): void;
+}
+
 export class ProviderFrameController {
   private readonly states = new WeakMap<HTMLIFrameElement, ProviderFrameState>();
+  private readonly activeFrames = new Set<HTMLIFrameElement>();
 
-  constructor(private readonly authorization: ProviderAuthorizationPort = runtimeAuthorization()) {}
+  constructor(
+    private readonly authorization: ProviderAuthorizationPort = runtimeAuthorization(),
+    private readonly environment: ProviderFrameEnvironment = browserFrameEnvironment(),
+  ) {}
 
   gate(frame: HTMLIFrameElement): void {
     const existing = this.states.get(frame);
     if (existing) {
       existing.version += 1;
       void this.revoke(existing);
-      frame.setAttribute("src", "about:blank");
+      delete existing.authorizedSource;
+      existing.ready = this.environment.prepare(frame);
       return;
     }
     if (!isSupportedVideoFrame(frame)) return;
@@ -60,8 +73,10 @@ export class ProviderFrameController {
     const originalSource = frame.getAttribute("src");
     if (!originalSource) return;
 
-    this.states.set(frame, { originalSource, version: 0 });
-    frame.setAttribute("src", "about:blank");
+    const state: ProviderFrameState = { originalSource, version: 0 };
+    this.states.set(frame, state);
+    this.activeFrames.add(frame);
+    state.ready = this.environment.prepare(frame);
   }
 
   async release(frame: HTMLIFrameElement): Promise<void> {
@@ -75,7 +90,8 @@ export class ProviderFrameController {
     if (!state) return;
     state.version += 1;
     void this.revoke(state);
-    frame.setAttribute("src", "about:blank");
+    delete state.authorizedSource;
+    state.ready = this.environment.prepare(frame);
   }
 
   async restore(frame: HTMLIFrameElement): Promise<void> {
@@ -85,14 +101,31 @@ export class ProviderFrameController {
   }
 
   async trust(frame: HTMLIFrameElement): Promise<void> {
-    if (!isSupportedVideoFrame(frame)) return;
     let state = this.states.get(frame);
-    if (!state) {
-      const originalSource = frame.getAttribute("src");
-      if (!originalSource) return;
-      state = { originalSource, version: 0 };
-      this.states.set(frame, state);
+    const originalSource = frame.getAttribute("src");
+    if (!originalSource) return;
+    if (
+      state &&
+      (originalSource === "about:blank" || originalSource === state.authorizedSource)
+    ) {
+      await state.inflight;
+      return;
     }
+    if (!isSupportedVideoFrame(frame)) return;
+    if (state?.originalSource === originalSource) {
+      await state.inflight;
+      return;
+    }
+    if (state) {
+      state.version += 1;
+      await this.revoke(state);
+    }
+    state = { originalSource, version: 0 };
+    this.states.set(frame, state);
+    this.activeFrames.add(frame);
+    state.ready = this.environment.prepare(frame);
+    await state.ready;
+    if (this.states.get(frame) !== state) return;
     await this.loadAuthorized(frame, state, false);
   }
 
@@ -102,6 +135,11 @@ export class ProviderFrameController {
     state.version += 1;
     void this.revoke(state);
     this.states.delete(frame);
+    this.activeFrames.delete(frame);
+  }
+
+  dispose(): void {
+    for (const frame of [...this.activeFrames]) this.forget(frame);
   }
 
   private async loadAuthorized(
@@ -109,7 +147,24 @@ export class ProviderFrameController {
     state: ProviderFrameState,
     disableAutoplay: boolean,
   ): Promise<void> {
+    if (state.inflight) return state.inflight;
+    const operation = this.performAuthorizedNavigation(frame, state, disableAutoplay);
+    state.inflight = operation;
+    try {
+      await operation;
+    } finally {
+      if (state.inflight === operation) delete state.inflight;
+    }
+  }
+
+  private async performAuthorizedNavigation(
+    frame: HTMLIFrameElement,
+    state: ProviderFrameState,
+    disableAutoplay: boolean,
+  ): Promise<void> {
     const version = ++state.version;
+    await state.ready;
+    if (state.version !== version || this.states.get(frame) !== state) return;
     await this.revoke(state);
     const authorization = await this.authorization.authorize(
       state.originalSource,
@@ -120,8 +175,13 @@ export class ProviderFrameController {
       return;
     }
     state.grantId = authorization.grantId;
-    frame.addEventListener("load", () => void this.revoke(state), { once: true });
-    frame.setAttribute("src", authorization.source);
+    state.authorizedSource = authorization.source;
+    try {
+      this.environment.navigate(frame, authorization.source);
+    } catch (error) {
+      await this.revoke(state);
+      throw error;
+    }
   }
 
   private async revoke(state: ProviderFrameState): Promise<void> {
@@ -130,6 +190,18 @@ export class ProviderFrameController {
     delete state.grantId;
     await this.authorization.revoke(grantId);
   }
+}
+
+function browserFrameEnvironment(): ProviderFrameEnvironment {
+  return {
+    prepare: async (frame) => {
+      frame.removeAttribute("srcdoc");
+      frame.setAttribute("src", "about:blank");
+    },
+    navigate: (frame, source) => {
+      frame.setAttribute("src", source);
+    },
+  };
 }
 
 function runtimeAuthorization(): ProviderAuthorizationPort {

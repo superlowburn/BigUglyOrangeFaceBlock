@@ -6,14 +6,25 @@ describe("extension manifest", () => {
 
   it("loads the content script at document_start in every frame", () => {
     expect(manifest.manifest_version).toBe(3);
-    expect(manifest.content_scripts[0]).toMatchObject({
+    expect(manifest.content_scripts).toEqual([
+      expect.objectContaining({
+        matches: ["http://*/*", "https://*/*"],
+        js: ["shadow-bridge.js"],
+        run_at: "document_start",
+        world: "MAIN",
+        all_frames: true,
+        match_about_blank: true,
+        match_origin_as_fallback: true,
+      }),
+      expect.objectContaining({
       matches: ["http://*/*", "https://*/*"],
       js: ["content.js"],
       run_at: "document_start",
       all_frames: true,
       match_about_blank: true,
       match_origin_as_fallback: true,
-    });
+      }),
+    ]);
   });
 
   it("requests only the agreed permissions", () => {
@@ -21,6 +32,7 @@ describe("extension manifest", () => {
       "activeTab",
       "declarativeNetRequestWithHostAccess",
       "storage",
+      "webNavigation",
     ].sort());
     expect(manifest.host_permissions).toEqual([
       "https://www.youtube.com/*",

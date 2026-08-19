@@ -27,6 +27,7 @@ const relevantAttributes = [
   "title",
   "aria-label",
 ] as const;
+const openShadowEvent = "eclipse-goggles-open-shadow";
 
 export class DocumentObserver {
   private readonly document: Document;
@@ -77,6 +78,7 @@ export class DocumentObserver {
     this.mutationObserver = this.createMutationObserver((records) => {
       for (const record of records) this.processMutation(record);
     });
+    this.document.addEventListener(openShadowEvent, this.onOpenShadow);
     this.observeRoot(this.document);
   }
 
@@ -111,6 +113,7 @@ export class DocumentObserver {
   }
 
   stop(): void {
+    this.document.removeEventListener(openShadowEvent, this.onOpenShadow);
     this.mutationObserver?.disconnect();
     this.resizeObserver?.disconnect();
     this.mutationObserver = null;
@@ -126,6 +129,13 @@ export class DocumentObserver {
     if (this.frame !== null) this.cancelFrame(this.frame);
     this.frame = null;
   }
+
+  private readonly onOpenShadow = (event: Event): void => {
+    const host = event.target;
+    if (!(host instanceof HTMLElement) || isExtensionOwned(host) || !host.shadowRoot) return;
+    this.observeRoot(host.shadowRoot);
+    this.scanTree(host.shadowRoot, false);
+  };
 
   private processMutation(record: MutationRecord): void {
     if (record.type === "characterData") {

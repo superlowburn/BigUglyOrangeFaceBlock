@@ -86,4 +86,96 @@ describe("ProviderRequestGate", () => {
     expect(getSessionRules).toHaveBeenCalledWith({ ruleIds: [9001] });
     expect(updateSessionRules).toHaveBeenCalledWith({ addRules: [], removeRuleIds: [9001] });
   });
+
+  it("expires a hung authorization after the hard ten-second bound", async () => {
+    const updateSessionRules = vi.fn().mockResolvedValue(undefined);
+    let expire!: () => void;
+    const gate = new ProviderRequestGate({
+      updateSessionRules,
+      token: () => "fixed-token",
+      ruleId: () => 9001,
+      setTimeout: (callback, delay) => {
+        expect(delay).toBe(10_000);
+        expire = callback;
+        return 44;
+      },
+      clearTimeout: vi.fn(),
+    });
+    await gate.authorize(7, "https://www.youtube.com/embed/abc");
+    updateSessionRules.mockClear();
+
+    expire();
+    await vi.waitFor(() => {
+      expect(updateSessionRules).toHaveBeenCalledWith({
+        addRules: [],
+        removeRuleIds: [9001],
+      });
+    });
+  });
+
+  it("revokes every outstanding grant owned by a closing or navigating tab", async () => {
+    const updateSessionRules = vi.fn().mockResolvedValue(undefined);
+    let nextId = 9000;
+    const gate = new ProviderRequestGate({
+      updateSessionRules,
+      token: () => "fixed-token",
+      ruleId: () => ++nextId,
+      setTimeout: () => 1,
+      clearTimeout: vi.fn(),
+    });
+    await gate.authorize(7, "https://www.youtube.com/embed/one");
+    await gate.authorize(8, "https://www.youtube.com/embed/two");
+    await gate.authorize(7, "https://player.vimeo.com/video/3");
+    updateSessionRules.mockClear();
+
+    await gate.revokeTab(7);
+
+    expect(updateSessionRules).toHaveBeenCalledWith({
+      addRules: [],
+      removeRuleIds: [9001, 9003],
+    });
+  });
+
+  it("sweeps all stale session grants on worker startup", async () => {
+    const updateSessionRules = vi.fn().mockResolvedValue(undefined);
+    const getSessionRules = vi.fn().mockResolvedValue([
+      { id: 51, condition: {}, action: { type: "allow" }, priority: 2 },
+      { id: 52, condition: {}, action: { type: "allow" }, priority: 2 },
+    ]);
+    const gate = new ProviderRequestGate({ updateSessionRules, getSessionRules });
+
+    await gate.sweep();
+
+    expect(getSessionRules).toHaveBeenCalledWith({});
+    expect(updateSessionRules).toHaveBeenCalledWith({
+      addRules: [],
+      removeRuleIds: [51, 52],
+    });
+  });
+
+  it("serializes concurrent rule mutations for multiple provider frames", async () => {
+    let updating = false;
+    const updateSessionRules = vi.fn(async () => {
+      if (updating) throw new Error("another rule update is pending");
+      updating = true;
+      await Promise.resolve();
+      updating = false;
+    });
+    let nextId = 70;
+    const gate = new ProviderRequestGate({
+      updateSessionRules,
+      token: () => `token-${nextId}`,
+      ruleId: () => ++nextId,
+      setTimeout: () => 1,
+      clearTimeout: vi.fn(),
+    });
+
+    await expect(Promise.all([
+      gate.authorize(7, "https://www.youtube.com/embed/one"),
+      gate.authorize(7, "https://www.youtube.com/embed/two"),
+      gate.authorize(7, "https://player.vimeo.com/video/3"),
+    ])).resolves.toHaveLength(3);
+    expect(updateSessionRules).toHaveBeenCalledTimes(3);
+  });
+
 });

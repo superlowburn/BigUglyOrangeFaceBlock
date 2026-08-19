@@ -17,6 +17,24 @@ type WorkerDependencies = {
   providerGate?: Pick<ProviderRequestGate, "authorize" | "revoke">;
 };
 
+interface ProviderLifecycleGate {
+  sweep(): Promise<void>;
+  revokeTab(tabId: number): Promise<void>;
+}
+
+interface TabLifecycleEvents {
+  onRemoved: { addListener(listener: (tabId: number) => void): void };
+}
+
+interface NavigationLifecycleEvents {
+  onBeforeNavigate: {
+    addListener(listener: (details: {
+      tabId: number;
+      frameId: number;
+    }) => void): void;
+  };
+}
+
 type WorkerResponse = PolicyContext | { grantId: number; source: string } | {
   error: "unsupported-page" | "invalid-message" | "origin-changed";
 };
@@ -96,7 +114,12 @@ export async function handleExtensionMessage(
       if (typeof tabId !== "number" || !originFor(sender.tab)) {
         return { error: "unsupported-page" };
       }
-      return providerGate(deps).authorize(tabId, message.source, message.disableAutoplay);
+      if (!deps.providerGate) await productionProviderReady;
+      return providerGate(deps).authorize(
+        tabId,
+        message.source,
+        message.disableAutoplay,
+      );
     }
     case "provider:revoke": {
       const tabId = sender.tab?.id;
@@ -113,6 +136,24 @@ const productionProviderGate = new ProviderRequestGate({
   updateSessionRules: (options) => chrome.declarativeNetRequest.updateSessionRules(options),
   getSessionRules: (filter) => chrome.declarativeNetRequest.getSessionRules(filter),
 });
+
+export async function installProviderGateLifecycle(
+  gate: ProviderLifecycleGate,
+  tabs: TabLifecycleEvents,
+  navigation: NavigationLifecycleEvents,
+): Promise<void> {
+  tabs.onRemoved.addListener((tabId) => void gate.revokeTab(tabId));
+  navigation.onBeforeNavigate.addListener(({ tabId, frameId }) => {
+    if (frameId === 0) void gate.revokeTab(tabId);
+  });
+  await gate.sweep();
+}
+
+const productionProviderReady = installProviderGateLifecycle(
+  productionProviderGate,
+  chrome.tabs,
+  chrome.webNavigation,
+);
 
 function providerGate(
   deps: WorkerDependencies,

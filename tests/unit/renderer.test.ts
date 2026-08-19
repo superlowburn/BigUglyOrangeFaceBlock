@@ -117,6 +117,56 @@ describe("ProtectionRenderer", () => {
     );
   });
 
+  it("places a linked image control after the link and contains its activation", () => {
+    const link = document.createElement("a");
+    link.href = "/destination";
+    const image = document.createElement("img");
+    link.append(image);
+    const after = document.createElement("button");
+    document.body.append(link, after);
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(0, 0, 640, 360));
+    const linkActivation = vi.fn();
+    const documentActivation = vi.fn();
+    link.addEventListener("click", linkActivation);
+    document.addEventListener("click", documentActivation, { once: true });
+    const onReveal = vi.fn();
+    const renderer = new ProtectionRenderer({
+      trustedActivation: (event) => event.type === "click",
+    });
+    protect(renderer, image, { onReveal });
+
+    const host = link.nextElementSibling as HTMLElement | null;
+    const activation = new MouseEvent("click", { bubbles: true, cancelable: true });
+    const uncancelled = renderer.debugLayerFor(image)?.dispatchEvent(activation);
+
+    expect(host?.hasAttribute("data-eclipse-goggles-root")).toBe(true);
+    expect(host?.nextElementSibling).toBe(after);
+    expect(link.contains(host)).toBe(false);
+    expect(uncancelled).toBe(false);
+    expect(linkActivation).not.toHaveBeenCalled();
+    expect(documentActivation).not.toHaveBeenCalled();
+    expect(onReveal).toHaveBeenCalledTimes(1);
+  });
+
+  it("places a picture control after its nearest interactive button ancestor", () => {
+    const wrapper = document.createElement("button");
+    const picture = document.createElement("picture");
+    const image = document.createElement("img");
+    picture.append(image);
+    wrapper.append(picture);
+    const after = document.createElement("span");
+    document.body.append(wrapper, after);
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(0, 0, 640, 360));
+    const renderer = new ProtectionRenderer();
+
+    protect(renderer, image);
+
+    const host = wrapper.nextElementSibling as HTMLElement | null;
+    expect(host?.hasAttribute("data-eclipse-goggles-root")).toBe(true);
+    expect(host?.nextElementSibling).toBe(after);
+    expect(wrapper.contains(host)).toBe(false);
+  });
+
   it("reveals only the keyboard-activated item once", () => {
     const first = document.createElement("img");
     const second = document.createElement("img");

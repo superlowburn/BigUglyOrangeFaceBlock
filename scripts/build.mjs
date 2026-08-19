@@ -9,6 +9,7 @@ await mkdir("dist/popup", { recursive: true });
 await Promise.all([
   ["src/background/service-worker.ts", "dist/service-worker.js"],
   ["src/content/index.ts", "dist/content.js"],
+  ["src/content/shadow-bridge.ts", "dist/shadow-bridge.js"],
   ["src/popup/popup.ts", "dist/popup/popup.js"],
 ].map(([entryPoints, outfile]) => build({
   entryPoints: [entryPoints],

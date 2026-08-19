@@ -137,7 +137,9 @@ export class ProtectionRenderer {
     const style = this.document.createElement("style");
     style.textContent = protectionStyles;
     shadow.append(style);
-    const anchor = target.closest("picture") ?? target;
+    const anchor = target.closest(
+      "a[href], button, input, select, textarea, summary, [role=button], [role=link], [tabindex], [contenteditable]:not([contenteditable=false])",
+    ) ?? target.closest("picture") ?? target;
     anchor.parentNode?.insertBefore(host, anchor.nextSibling);
     if (!host.isConnected) this.document.documentElement.append(host);
     return { host, shadow };
@@ -145,6 +147,8 @@ export class ProtectionRenderer {
 
   private activate(record: ProtectionRecord, event: Event): void {
     if (!this.trustedActivation(event) || record.removed) return;
+    event.preventDefault();
+    event.stopPropagation();
     if (record.revealed) {
       if (record.layer.classList.contains("eg-reprotect")) record.handle.reprotect();
       return;
