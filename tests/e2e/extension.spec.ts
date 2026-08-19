@@ -19,10 +19,11 @@ type LaunchedExtension = {
   context: BrowserContext;
   page: Page;
   worker: Worker;
+  unexpectedRequests: string[];
 };
 
 async function launchExtension(
-  options: { deviceScaleFactor?: number } = {},
+  options: { deviceScaleFactor?: number; fulfillProviders?: boolean } = {},
 ): Promise<LaunchedExtension> {
   const context = await chromium.launchPersistentContext("", {
     headless: false,
@@ -33,9 +34,48 @@ async function launchExtension(
       `--load-extension=${extensionPath}`,
     ],
   });
+  const unexpectedRequests: string[] = [];
+  context.on("request", (request) => {
+    const url = request.url();
+    if (isLocalRequest(url)) return;
+    if (options.fulfillProviders && isProviderFixtureRequest(url)) return;
+    unexpectedRequests.push(`${request.method()} ${request.resourceType()} ${url}`);
+  });
+  if (options.fulfillProviders) {
+    await context.route("https://www.youtube.com/**", (route) => route.fulfill({
+      body: "<!doctype html><html><body><h1>YouTube provider fixture</h1></body></html>",
+      contentType: "text/html",
+    }));
+    await context.route("https://player.vimeo.com/**", (route) => route.fulfill({
+      body: "<!doctype html><html><body><h1>Vimeo provider fixture</h1></body></html>",
+      contentType: "text/html",
+    }));
+  }
   const worker = context.serviceWorkers()[0] ?? await context.waitForEvent("serviceworker");
   const page = context.pages()[0] ?? await context.newPage();
-  return { context, page, worker };
+  return { context, page, worker, unexpectedRequests };
+}
+
+function isLocalRequest(url: string): boolean {
+  return url.startsWith(fixtureOrigin) ||
+    url.startsWith("data:") ||
+    url.startsWith("blob:") ||
+    url.startsWith("about:") ||
+    url.startsWith("chrome-extension:");
+}
+
+function isProviderFixtureRequest(url: string): boolean {
+  return /^https:\/\/www\.youtube\.com\/embed\/[^/]+/.test(url) ||
+    /^https:\/\/player\.vimeo\.com\/video\/[^/]+/.test(url);
+}
+
+async function closeExtension(extension: LaunchedExtension): Promise<void> {
+  await extension.page.waitForTimeout(50).catch(() => undefined);
+  await extension.context.close();
+  expect(
+    extension.unexpectedRequests,
+    "unexpected outbound request during a loaded-extension fixture run",
+  ).toEqual([]);
 }
 
 function layers(scope: Page | Frame): Locator {
@@ -84,7 +124,8 @@ test("fixture server is loopback-only and rejects traversal outside fixtures", a
 });
 
 test("protects article images", async () => {
-  const { context, page } = await launchExtension();
+  const extension = await launchExtension();
+  const { page } = extension;
   try {
     await page.goto(`${fixtureOrigin}/article.html`);
     await expect(page.locator("#first")).toHaveAttribute("data-eclipse-goggles-protected", "image");
@@ -101,12 +142,13 @@ test("protects article images", async () => {
     await page.keyboard.press("Enter");
     await expect(page.locator("#second")).not.toHaveAttribute("data-eclipse-goggles-protected", "image");
   } finally {
-    await context.close();
+    await closeExtension(extension);
   }
 });
 
 test("protects dynamic and client-route media and removes every layer in Trusted mode", async () => {
-  const { context, page, worker } = await launchExtension();
+  const extension = await launchExtension();
+  const { page, worker } = extension;
   try {
     await page.goto(`${fixtureOrigin}/dynamic-feed.html`);
     await expect(page.locator("#appended-image")).toHaveAttribute("data-eclipse-goggles-protected", "image");
@@ -118,12 +160,13 @@ test("protects dynamic and client-route media and removes every layer in Trusted
     await expect(page.locator(protectedSelector)).toHaveCount(0);
     await expect(page.locator("[data-eclipse-goggles-root]")).toHaveCount(0);
   } finally {
-    await context.close();
+    await closeExtension(extension);
   }
 });
 
 test("Strict mode re-protects a revealed image after two seconds fully away", async () => {
-  const { context, page, worker } = await launchExtension();
+  const extension = await launchExtension();
+  const { page, worker } = extension;
   try {
     await setMode(worker, "strict");
     await page.goto(`${fixtureOrigin}/dynamic-feed.html`);
@@ -131,22 +174,28 @@ test("Strict mode re-protects a revealed image after two seconds fully away", as
     await layerWithText(page, "A lighthouse").getByRole("button", { name: "Reveal" }).click();
     await expect(page.locator("#strict-image")).not.toHaveAttribute("data-eclipse-goggles-protected", "image");
 
+    const scrolledAt = Date.now();
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await page.waitForTimeout(1_250);
+    await expect(page.locator("#strict-image")).not.toHaveAttribute(
+      "data-eclipse-goggles-protected",
+      "image",
+    );
     await expect(page.locator("#strict-image")).toHaveAttribute(
       "data-eclipse-goggles-protected",
       "image",
-      { timeout: 3_500 },
+      { timeout: 2_000 },
     );
+    expect(Date.now() - scrolledAt).toBeGreaterThanOrEqual(2_000);
   } finally {
-    await context.close();
+    await closeExtension(extension);
   }
 });
 
 test("secures native autoplay video and reveal never starts or unmutes it", async () => {
-  const { context, page } = await launchExtension();
+  const extension = await launchExtension({ fulfillProviders: true });
+  const { page } = extension;
   try {
-    await page.route("https://www.youtube.com/**", (route) => route.fulfill({ body: "<!doctype html><title>YouTube fixture</title>", contentType: "text/html" }));
-    await page.route("https://player.vimeo.com/**", (route) => route.fulfill({ body: "<!doctype html><title>Vimeo fixture</title>", contentType: "text/html" }));
     await page.goto(`${fixtureOrigin}/video.html`);
     const video = page.locator("#native-video");
     await expect(video).toHaveAttribute("data-eclipse-goggles-protected", "video");
@@ -173,18 +222,13 @@ test("secures native autoplay video and reveal never starts or unmutes it", asyn
     });
     expect(revealedTarget).toBe(true);
   } finally {
-    await context.close();
+    await closeExtension(extension);
   }
 });
 
 test("gates and exactly restores YouTube and Vimeo frames without real external traffic", async () => {
-  const { context, page } = await launchExtension();
-  const externalRequests: string[] = [];
-  context.on("request", (request) => {
-    if (!request.url().startsWith(fixtureOrigin) && !request.url().startsWith("data:")) externalRequests.push(request.url());
-  });
-  await context.route("https://www.youtube.com/**", (route) => route.fulfill({ body: "<!doctype html><title>YouTube fixture</title>", contentType: "text/html" }));
-  await context.route("https://player.vimeo.com/**", (route) => route.fulfill({ body: "<!doctype html><title>Vimeo fixture</title>", contentType: "text/html" }));
+  const extension = await launchExtension({ fulfillProviders: true });
+  const { page } = extension;
   try {
     await page.goto(`${fixtureOrigin}/video.html`);
     const youtube = page.locator("#youtube");
@@ -198,19 +242,14 @@ test("gates and exactly restores YouTube and Vimeo frames without real external 
     await layerWithText(page, "Vimeo landscape video").getByRole("button", { name: "Reveal" }).click();
     await expect(vimeo).toHaveAttribute("src", "https://player.vimeo.com/video/123456789?autoplay=1");
 
-    expect(new Set(externalRequests)).toEqual(new Set([
-      "https://www.youtube.com/embed/eclipse-test?autoplay=1",
-      "https://player.vimeo.com/video/123456789?autoplay=1",
-    ]));
   } finally {
-    await context.close();
+    await closeExtension(extension);
   }
 });
 
 test("protects native video in a same-origin child and does not double-protect provider child documents", async () => {
-  const { context, page } = await launchExtension();
-  await context.route("https://www.youtube.com/**", (route) => route.fulfill({ body: "<!doctype html><html><body><h1>Provider child</h1></body></html>", contentType: "text/html" }));
-  await context.route("https://player.vimeo.com/**", (route) => route.fulfill({ body: "<!doctype html><title>Vimeo fixture</title>", contentType: "text/html" }));
+  const extension = await launchExtension({ fulfillProviders: true });
+  const { page } = extension;
   try {
     await page.goto(`${fixtureOrigin}/frame-host.html`);
     const nested = page.frameLocator("#same-origin");
@@ -227,12 +266,13 @@ test("protects native video in a same-origin child and does not double-protect p
     const providerChild = await providerNavigation;
     await expect(providerChild.locator("[data-eclipse-goggles-root]")).toHaveCount(0);
   } finally {
-    await context.close();
+    await closeExtension(extension);
   }
 });
 
 test("keeps overlays aligned after resize and 125 percent page scale", async () => {
-  const { context, page } = await launchExtension();
+  const extension = await launchExtension();
+  const { context, page } = extension;
   try {
     await page.goto(`${fixtureOrigin}/article.html`);
     const target = page.locator("#first");
@@ -246,31 +286,39 @@ test("keeps overlays aligned after resize and 125 percent page scale", async () 
     await cdp.send("Emulation.setPageScaleFactor", { pageScaleFactor: 1.25 });
     await assertAligned(target, layer);
   } finally {
-    await context.close();
+    await closeExtension(extension);
   }
 });
 
 test("keeps overlays aligned at deviceScaleFactor 2", async () => {
-  const { context, page } = await launchExtension({ deviceScaleFactor: 2 });
+  const extension = await launchExtension({ deviceScaleFactor: 2 });
+  const { page } = extension;
   try {
     await page.goto(`${fixtureOrigin}/article.html`);
     await expect(page.locator("#first")).toHaveAttribute("data-eclipse-goggles-protected", "image");
     await assertAligned(page.locator("#first"), layerWithText(page, "A moonlit lake"));
   } finally {
-    await context.close();
+    await closeExtension(extension);
   }
 });
 
 test("has visible keyboard focus, specified caption contrast, and only approved public attributes", async () => {
-  const { context, page } = await launchExtension();
-  const outbound: string[] = [];
-  context.on("request", (request) => {
-    if (!request.url().startsWith(fixtureOrigin) && !request.url().startsWith("data:")) outbound.push(request.url());
-  });
+  const extension = await launchExtension();
+  const { page } = extension;
   try {
     await page.goto(`${fixtureOrigin}/article.html`);
     const layer = layerWithText(page, "A moonlit lake");
-    await layer.focus();
+    let reachedProtectedLayer = false;
+    for (let step = 0; step < 8 && !reachedProtectedLayer; step += 1) {
+      await page.keyboard.press("Tab");
+      reachedProtectedLayer = await layer.evaluate((node) => {
+        const root = node.getRootNode();
+        return root instanceof ShadowRoot &&
+          root.activeElement === node &&
+          document.activeElement === root.host;
+      });
+    }
+    expect(reachedProtectedLayer, "Tab navigation did not reach the protected media layer").toBe(true);
     const presentation = await layer.evaluate((node) => {
       const layerStyle = getComputedStyle(node);
       const captionStyle = getComputedStyle(node.querySelector(".eg-caption")!);
@@ -295,8 +343,7 @@ test("has visible keyboard focus, specified caption contrast, and only approved 
       "data-eclipse-goggles-root",
       "data-eclipse-goggles-protected",
     ]));
-    expect(outbound).toEqual([]);
   } finally {
-    await context.close();
+    await closeExtension(extension);
   }
 });
