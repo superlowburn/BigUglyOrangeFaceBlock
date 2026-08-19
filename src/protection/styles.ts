@@ -10,6 +10,12 @@ export const protectionStyles = `
 }
 
 .eg-layer {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  text-align: initial;
   position: fixed;
   z-index: 2147483647;
   overflow: hidden;
@@ -42,9 +48,8 @@ export const protectionStyles = `
   overflow-wrap: anywhere;
 }
 
-button {
+.eg-action {
   flex: none;
-  appearance: none;
   border: 1px solid rgba(38, 41, 44, 0.32);
   border-radius: 7px;
   padding: 7px 10px;
@@ -54,8 +59,7 @@ button {
   font: inherit;
 }
 
-.eg-layer:focus-visible,
-button:focus-visible {
+.eg-layer:focus-visible {
   outline: 3px solid #1664d7;
   outline-offset: 2px;
 }
@@ -67,22 +71,24 @@ button:focus-visible {
   background: rgba(250, 250, 250, 0.94);
 }
 
-.eg-revealed {
+.eg-layer.eg-revealed {
   overflow: visible;
   pointer-events: none;
   cursor: default;
 }
 
 .eg-reprotect {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
+  border: 1px solid rgba(38, 41, 44, 0.32);
+  border-radius: 7px;
+  padding: 7px 10px;
+  color: #26292c;
+  background: #fff;
   opacity: 0;
   pointer-events: none;
   transition: opacity 120ms ease;
 }
 
-.eg-target-hover .eg-reprotect,
+.eg-target-hover.eg-reprotect,
 .eg-reprotect:focus,
 .eg-reprotect:focus-visible {
   opacity: 1;

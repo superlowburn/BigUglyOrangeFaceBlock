@@ -25,7 +25,12 @@ describe("handleExtensionMessage", () => {
 
     expect(
       await handleExtensionMessage(
-        { type: "policy:set-tab", tabId: 7, mode: "strict" },
+        {
+          type: "policy:set-tab",
+          tabId: 7,
+          mode: "strict",
+          expectedOrigin: "https://news.example",
+        },
         {},
         deps,
       ),
@@ -34,6 +39,25 @@ describe("handleExtensionMessage", () => {
     expect(deps.storage.set).toHaveBeenCalledWith({
       "site-policy:https://news.example": "strict",
     });
+  });
+
+  it("rejects a set-tab request when the tab redirected away from the displayed origin", async () => {
+    const deps = {
+      storage: { get: vi.fn().mockResolvedValue({}), set: vi.fn() },
+      tabs: { get: vi.fn().mockResolvedValue({ id: 7, url: "https://redirected.example/login" }) },
+    };
+
+    await expect(handleExtensionMessage(
+      {
+        type: "policy:set-tab",
+        tabId: 7,
+        mode: "strict",
+        expectedOrigin: "https://news.example",
+      },
+      {},
+      deps,
+    )).resolves.toEqual({ error: "origin-changed" });
+    expect(deps.storage.set).not.toHaveBeenCalled();
   });
 
   it("rejects malformed tab URLs as unsupported pages", async () => {

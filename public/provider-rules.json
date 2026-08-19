@@ -1,0 +1,29 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": { "type": "redirect", "redirect": { "extensionPath": "/provider-blocked.html" } },
+    "condition": {
+      "regexFilter": "^https://www\\.youtube\\.com/embed/[^/?#]+(?:[?#].*)?$",
+      "resourceTypes": ["sub_frame"]
+    }
+  },
+  {
+    "id": 2,
+    "priority": 1,
+    "action": { "type": "redirect", "redirect": { "extensionPath": "/provider-blocked.html" } },
+    "condition": {
+      "regexFilter": "^https://www\\.youtube-nocookie\\.com/embed/[^/?#]+(?:[?#].*)?$",
+      "resourceTypes": ["sub_frame"]
+    }
+  },
+  {
+    "id": 3,
+    "priority": 1,
+    "action": { "type": "redirect", "redirect": { "extensionPath": "/provider-blocked.html" } },
+    "condition": {
+      "regexFilter": "^https://player\\.vimeo\\.com/video/[^/?#]+(?:[?#].*)?$",
+      "resourceTypes": ["sub_frame"]
+    }
+  }
+]

@@ -6,19 +6,26 @@ function environment(): {
   env: ClassificationEnvironment;
   setBox: (element: Element, width: number, height: number) => void;
   setBackground: (element: Element, backgroundImage: string) => void;
+  setStyle: (element: Element, style: Partial<CSSStyleDeclaration>) => void;
 } {
   const boxes = new WeakMap<Element, Pick<DOMRect, "width" | "height">>();
   const backgrounds = new WeakMap<Element, string>();
+  const styles = new WeakMap<Element, Partial<CSSStyleDeclaration>>();
 
   return {
     env: {
       box: (element) => boxes.get(element) ?? { width: 0, height: 0 },
       style: (element) => ({
         backgroundImage: backgrounds.get(element) ?? "none",
+        display: "block",
+        visibility: "visible",
+        opacity: "1",
+        ...styles.get(element),
       }) as CSSStyleDeclaration,
     },
     setBox: (element, width, height) => boxes.set(element, { width, height }),
     setBackground: (element, backgroundImage) => backgrounds.set(element, backgroundImage),
+    setStyle: (element, style) => styles.set(element, style),
   };
 }
 
@@ -130,6 +137,25 @@ describe("classifyElement", () => {
     setBackground(element, 'url("hero.jpg")');
 
     expect(classifyElement(element, env)).toBeNull();
+  });
+
+  it("protects a CSS background whose only descendant text is not rendered", () => {
+    const { env, setBox, setBackground, setStyle } = environment();
+    const element = document.createElement("div");
+    const hidden = document.createElement("span");
+    hidden.textContent = "Screen reader description";
+    element.append(hidden);
+    setBox(element, 640, 360);
+    setBox(hidden, 1, 1);
+    setStyle(hidden, {
+      position: "absolute",
+      overflow: "hidden",
+      clip: "rect(0px, 0px, 0px, 0px)",
+      whiteSpace: "nowrap",
+    });
+    setBackground(element, 'url("hero.jpg")');
+
+    expect(classifyElement(element, env)).toMatchObject({ kind: "background-image" });
   });
 
   it("ignores a CSS background that contains a control", () => {

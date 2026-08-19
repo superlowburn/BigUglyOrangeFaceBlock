@@ -19,4 +19,6 @@ export interface PolicyContext {
 export type ExtensionMessage =
   | { type: "policy:get-current" }
   | { type: "policy:get-tab"; tabId: number }
-  | { type: "policy:set-tab"; tabId: number; mode: SiteMode };
+  | { type: "policy:set-tab"; tabId: number; mode: SiteMode; expectedOrigin: string }
+  | { type: "provider:authorize"; source: string; disableAutoplay: boolean }
+  | { type: "provider:revoke"; grantId: number };

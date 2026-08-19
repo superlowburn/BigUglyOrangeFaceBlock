@@ -15,6 +15,26 @@ describe("resolveDescription", () => {
     expect(resolveDescription(candidate(element))).toBe("Mountain sunrise");
   });
 
+  it("resolves normalized aria-labelledby text before aria-label and caps it", () => {
+    const first = document.createElement("span");
+    first.id = "first-label";
+    first.textContent = `  ${"😀".repeat(498)}  `;
+    const second = document.createElement("span");
+    second.id = "second-label";
+    second.textContent = "  final label  ";
+    const element = document.createElement("img");
+    element.setAttribute("aria-labelledby", "first-label missing second-label");
+    element.setAttribute("aria-label", "Fallback label");
+    document.body.append(first, second, element);
+
+    const description = resolveDescription(candidate(element));
+
+    expect(Array.from(description)).toHaveLength(500);
+    expect(description.startsWith("😀".repeat(498))).toBe(true);
+    expect(description.endsWith("f")).toBe(true);
+    expect(description).not.toContain("Fallback label");
+  });
+
   it("uses a closest figure caption when alt text is missing", () => {
     const figure = document.createElement("figure");
     const element = document.createElement("img");

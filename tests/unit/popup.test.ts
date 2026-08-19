@@ -96,11 +96,33 @@ describe("mountPopup", () => {
         type: "policy:set-tab",
         tabId: 7,
         mode: "strict",
+        expectedOrigin: "https://verified.example",
       });
       expect(strict?.getAttribute("aria-pressed")).toBe("true");
     });
     expect(trusted?.getAttribute("aria-pressed")).toBe("false");
     expect(protectedButton?.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("rejects a successful-looking response for a different origin", async () => {
+    const chromeApi = createChromeApi(
+      vi
+        .fn()
+        .mockResolvedValueOnce({ origin: "https://verified.example", mode: "protected" })
+        .mockResolvedValueOnce({ origin: "https://redirected.example", mode: "strict" }),
+    );
+    await mountPopup(root, chromeApi);
+    const [, protectedButton, strict] = getModeButtons(root);
+
+    strict!.click();
+
+    await vi.waitFor(() => {
+      expect(protectedButton?.getAttribute("aria-pressed")).toBe("true");
+      expect(strict?.getAttribute("aria-pressed")).toBe("false");
+      expect(root.querySelector('[role="alert"]')?.textContent).toBe(
+        "Could not update protection. Try again.",
+      );
+    });
   });
 
   it("rolls back an optimistic mode change and shows a local error when saving fails", async () => {

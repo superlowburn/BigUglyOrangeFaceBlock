@@ -11,12 +11,21 @@ export function resolveDescription(candidate: MediaCandidate): string {
   const { element, kind } = candidate;
   const description =
     normalize(element.getAttribute("alt")) ||
+    labelledBy(element) ||
     normalize(element.getAttribute("aria-label")) ||
     figureCaption(element) ||
     normalize(element.getAttribute("title")) ||
     fallbackDescriptions[kind];
 
-  return Array.from(description).slice(0, 500).join("");
+  return Array.from(description).slice(0, 500).join("").trim();
+}
+
+function labelledBy(element: HTMLElement): string {
+  const ids = element.getAttribute("aria-labelledby")?.split(/\s+/u).filter(Boolean) ?? [];
+  return normalize(ids
+    .map((id) => element.ownerDocument.getElementById(id)?.textContent ?? "")
+    .filter(Boolean)
+    .join(" "));
 }
 
 function figureCaption(element: HTMLElement): string {

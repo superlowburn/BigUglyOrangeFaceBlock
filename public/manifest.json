@@ -3,8 +3,23 @@
   "name": "Eclipse Goggles",
   "description": "Safety goggles for visual media on the web.",
   "version": "0.1.0",
-  "permissions": ["storage", "activeTab"],
-  "host_permissions": ["http://*/*", "https://*/*"],
+  "permissions": ["storage", "activeTab", "declarativeNetRequestWithHostAccess"],
+  "host_permissions": [
+    "https://www.youtube.com/*",
+    "https://www.youtube-nocookie.com/*",
+    "https://player.vimeo.com/*"
+  ],
+  "declarative_net_request": {
+    "rule_resources": [{
+      "id": "provider_pre_request_gate",
+      "enabled": true,
+      "path": "provider-rules.json"
+    }]
+  },
+  "web_accessible_resources": [{
+    "resources": ["provider-blocked.html"],
+    "matches": ["<all_urls>"]
+  }],
   "background": { "service_worker": "service-worker.js" },
   "action": { "default_popup": "popup/popup.html" },
   "content_scripts": [{

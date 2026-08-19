@@ -29,7 +29,8 @@ export interface RendererEnvironment {
 interface ProtectionRecord {
   candidate: MediaCandidate;
   description: string;
-  layer: HTMLDivElement;
+  host: HTMLElement;
+  layer: HTMLButtonElement;
   onReveal: () => void;
   onReprotect: () => void;
   mode: SiteMode;
@@ -59,8 +60,6 @@ export class ProtectionRenderer {
   private readonly createStrictGuard: () => Pick<StrictRevealGuard, "watch">;
   private readonly records = new Map<HTMLElement, ProtectionRecord>();
   private readonly dirtyRecords = new Set<ProtectionRecord>();
-  private host: HTMLElement | null = null;
-  private shadow: ShadowRoot | null = null;
   private frame: number | null = null;
   private listening = false;
 
@@ -77,11 +76,10 @@ export class ProtectionRenderer {
     const existing = this.records.get(candidate.element);
     if (existing && !existing.removed) return existing.handle;
 
-    const shadow = this.ensureRoot();
-    const layer = this.document.createElement("div");
+    const { host, shadow } = this.createRoot(candidate.element);
+    const layer = this.document.createElement("button");
+    layer.type = "button";
     layer.className = "eg-layer";
-    layer.setAttribute("role", "button");
-    layer.tabIndex = 0;
     shadow.append(layer);
 
     let record!: ProtectionRecord;
@@ -96,6 +94,7 @@ export class ProtectionRenderer {
     record = {
       candidate,
       description: options.description,
+      host,
       layer,
       onReveal: options.onReveal,
       onReprotect: options.onReprotect,
@@ -109,7 +108,6 @@ export class ProtectionRenderer {
     };
 
     layer.addEventListener("click", (event) => this.activate(record, event));
-    layer.addEventListener("keydown", (event) => this.activate(record, event));
     candidate.element.addEventListener("mouseenter", record.onMouseEnter);
     candidate.element.addEventListener("mouseleave", record.onMouseLeave);
 
@@ -122,13 +120,11 @@ export class ProtectionRenderer {
     return handle;
   }
 
-  debugLayerFor(element: HTMLElement): HTMLDivElement | null {
+  debugLayerFor(element: HTMLElement): HTMLButtonElement | null {
     return this.records.get(element)?.layer ?? null;
   }
 
-  private ensureRoot(): ShadowRoot {
-    if (this.host?.isConnected && this.shadow) return this.shadow;
-
+  private createRoot(target: HTMLElement): { host: HTMLElement; shadow: ShadowRoot } {
     const host = this.document.createElement("div");
     host.setAttribute("data-eclipse-goggles-root", "");
     Object.assign(host.style, {
@@ -141,21 +137,16 @@ export class ProtectionRenderer {
     const style = this.document.createElement("style");
     style.textContent = protectionStyles;
     shadow.append(style);
-    this.document.documentElement.append(host);
-    this.host = host;
-    this.shadow = shadow;
-    return shadow;
+    const anchor = target.closest("picture") ?? target;
+    anchor.parentNode?.insertBefore(host, anchor.nextSibling);
+    if (!host.isConnected) this.document.documentElement.append(host);
+    return { host, shadow };
   }
 
   private activate(record: ProtectionRecord, event: Event): void {
     if (!this.trustedActivation(event) || record.removed) return;
-    if (event.type === "keydown" && ((event as KeyboardEvent).key === " " || (event as KeyboardEvent).key === "Spacebar")) {
-      event.preventDefault();
-    }
-
     if (record.revealed) {
-      const target = event.target;
-      if (target instanceof Element && target.closest(".eg-reprotect")) record.handle.reprotect();
+      if (record.layer.classList.contains("eg-reprotect")) record.handle.reprotect();
       return;
     }
 
@@ -165,13 +156,12 @@ export class ProtectionRenderer {
   private reveal(record: ProtectionRecord): void {
     if (record.removed || record.revealed) return;
     record.revealed = true;
-    record.layer.className = "eg-layer eg-revealed";
-    record.layer.removeAttribute("role");
-    record.layer.removeAttribute("aria-label");
-    record.layer.tabIndex = -1;
-    record.layer.replaceChildren(this.reprotectButton());
+    record.layer.className = "eg-layer eg-revealed eg-reprotect";
+    record.layer.setAttribute("aria-label", "Protect again");
+    record.layer.textContent = "Protect again";
     record.candidate.element.removeAttribute("data-eclipse-goggles-protected");
     record.onReveal();
+    this.updateRecord(record);
     if (record.mode === "strict") {
       record.stopStrictWatch = this.createStrictGuard().watch(record.candidate.element, () => {
         record.handle.reprotect();
@@ -185,6 +175,7 @@ export class ProtectionRenderer {
     record.stopStrictWatch?.();
     record.stopStrictWatch = null;
     this.renderProtected(record);
+    this.updateRecord(record);
     markProtected(record.candidate);
     record.onReprotect();
   }
@@ -192,9 +183,7 @@ export class ProtectionRenderer {
   private renderProtected(record: ProtectionRecord, box?: DOMRect): void {
     const { layer, description } = record;
     layer.className = "eg-layer eg-frost";
-    layer.setAttribute("role", "button");
     layer.setAttribute("aria-label", `Reveal protected media: ${description}`);
-    layer.tabIndex = 0;
 
     const caption = this.document.createElement("div");
     caption.className = "eg-caption";
@@ -208,20 +197,11 @@ export class ProtectionRenderer {
       caption.append(copy);
     }
 
-    const reveal = this.document.createElement("button");
-    reveal.type = "button";
+    const reveal = this.document.createElement("span");
+    reveal.className = "eg-action";
     reveal.textContent = compact ? `Reveal ${mediaLabel(record.candidate.kind)}` : "Reveal";
-    if (compact) reveal.setAttribute("aria-label", `${reveal.textContent}: ${description}`);
     caption.append(reveal);
     layer.replaceChildren(caption);
-  }
-
-  private reprotectButton(): HTMLButtonElement {
-    const button = this.document.createElement("button");
-    button.type = "button";
-    button.className = "eg-reprotect";
-    button.textContent = "Protect again";
-    return button;
   }
 
   private isCompact(record: ProtectionRecord, currentBox?: DOMRect): boolean {
@@ -233,6 +213,17 @@ export class ProtectionRenderer {
     if (record.removed) return;
     const box = currentBox ?? record.candidate.element.getBoundingClientRect();
     const compact = box.width < 160 || box.height < 90;
+    if (record.revealed) {
+      const width = Math.min(140, box.width);
+      const height = Math.min(44, box.height);
+      Object.assign(record.layer.style, {
+        left: `${box.right - width}px`,
+        top: `${box.bottom - height}px`,
+        width: `${width}px`,
+        height: `${height}px`,
+      });
+      return;
+    }
     if (!record.revealed && layerCompact(record.layer) !== compact) {
       this.renderProtected(record, box);
     }
@@ -279,7 +270,7 @@ export class ProtectionRenderer {
     record.stopStrictWatch?.();
     record.stopStrictWatch = null;
     this.dirtyRecords.delete(record);
-    record.layer.remove();
+    record.host.remove();
     record.candidate.element.removeAttribute("data-eclipse-goggles-protected");
     record.candidate.element.removeEventListener("mouseenter", record.onMouseEnter);
     record.candidate.element.removeEventListener("mouseleave", record.onMouseLeave);
@@ -291,9 +282,6 @@ export class ProtectionRenderer {
     this.listening = false;
     if (this.frame !== null) this.cancelFrame(this.frame);
     this.frame = null;
-    this.host?.remove();
-    this.host = null;
-    this.shadow = null;
   }
 }
 

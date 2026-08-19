@@ -64,6 +64,7 @@ describe("DocumentObserver", () => {
       childList: true,
       subtree: true,
       attributes: true,
+      characterData: true,
       attributeFilter: [
         "src",
         "srcset",
@@ -97,6 +98,45 @@ describe("DocumentObserver", () => {
     expect(onCandidates).toHaveBeenCalledTimes(1);
     expect(onCandidates).toHaveBeenCalledWith(images);
     expect(observeResize).toHaveBeenCalledTimes(10);
+  });
+
+  it("batches layout invalidation once when unrelated content is inserted or removed", async () => {
+    const frames = frameQueue();
+    const observer = new DocumentObserver({
+      ...frames.environment,
+      createResizeObserver: () => ({ observe: vi.fn(), disconnect: vi.fn() }),
+    });
+    const onLayoutChange = vi.fn();
+    observer.start(vi.fn(), onLayoutChange);
+
+    const spacer = document.createElement("div");
+    document.body.prepend(spacer);
+    spacer.remove();
+    await deliverMutations();
+
+    expect(frames.pending()).toBe(1);
+    frames.flush();
+    expect(onLayoutChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("batches layout invalidation for text insertion and character-data changes", async () => {
+    const frames = frameQueue();
+    const observer = new DocumentObserver({
+      ...frames.environment,
+      createResizeObserver: () => ({ observe: vi.fn(), disconnect: vi.fn() }),
+    });
+    const onLayoutChange = vi.fn();
+    observer.start(vi.fn(), onLayoutChange);
+
+    const text = document.createTextNode("short");
+    document.body.append(text);
+    await deliverMutations();
+    text.data = "a much longer line that changes layout";
+    await deliverMutations();
+
+    expect(frames.pending()).toBe(1);
+    frames.flush();
+    expect(onLayoutChange).toHaveBeenCalledTimes(1);
   });
 
   it("reconsiders exact relevant attribute changes and identifies them as mutations", async () => {
@@ -150,6 +190,87 @@ describe("DocumentObserver", () => {
     frames.flush();
 
     expect(onCandidates).toHaveBeenCalledWith([document.body, externallyStyled]);
+  });
+
+  it("tracks resize only for plausible media or background candidates", () => {
+    const frames = frameQueue();
+    const observeResize = vi.fn();
+    const observer = new DocumentObserver({
+      ...frames.environment,
+      createResizeObserver: () => ({
+        observe: observeResize,
+        unobserve: vi.fn(),
+        disconnect: vi.fn(),
+      }),
+    });
+    const ordinary = Array.from({ length: 50 }, () => document.createElement("div"));
+    const image = document.createElement("img");
+    const possibleBackground = document.createElement("div");
+    possibleBackground.className = "hero-art";
+    document.body.append(...ordinary, image, possibleBackground);
+    observer.start(vi.fn());
+
+    observer.scan(document.body);
+
+    expect(observeResize).toHaveBeenCalledTimes(2);
+    expect(observeResize).toHaveBeenCalledWith(image);
+    expect(observeResize).toHaveBeenCalledWith(possibleBackground);
+  });
+
+  it("unobserves detached and reclassified resize candidates", async () => {
+    const frames = frameQueue();
+    const unobserve = vi.fn();
+    const observer = new DocumentObserver({
+      ...frames.environment,
+      createResizeObserver: () => ({
+        observe: vi.fn(),
+        unobserve,
+        disconnect: vi.fn(),
+      }),
+    });
+    const image = document.createElement("img");
+    const possibleBackground = document.createElement("div");
+    possibleBackground.className = "hero-art";
+    document.body.append(image, possibleBackground);
+    observer.start(vi.fn());
+    observer.scan(document.body);
+    frames.flush();
+
+    image.remove();
+    possibleBackground.className = "";
+    await deliverMutations();
+    frames.flush();
+
+    expect(unobserve).toHaveBeenCalledWith(image);
+    expect(unobserve).toHaveBeenCalledWith(possibleBackground);
+  });
+
+  it("recursively discovers existing and dynamically inserted open shadow roots", async () => {
+    const frames = frameQueue();
+    const observer = new DocumentObserver({
+      ...frames.environment,
+      createResizeObserver: () => ({ observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn() }),
+    });
+    const existingHost = document.createElement("section");
+    const existingImage = document.createElement("img");
+    existingHost.attachShadow({ mode: "open" }).append(existingImage);
+    document.body.append(existingHost);
+    const onCandidates = vi.fn();
+    observer.start(onCandidates);
+    observer.scan(document.body);
+    frames.flush();
+
+    expect(onCandidates.mock.calls.flatMap(([elements]) => elements)).toContain(existingImage);
+
+    onCandidates.mockClear();
+    const dynamicHost = document.createElement("article");
+    const dynamicImage = document.createElement("img");
+    dynamicHost.attachShadow({ mode: "open" }).append(dynamicImage);
+    document.body.append(dynamicHost);
+    await deliverMutations();
+    frames.flush();
+
+    expect(onCandidates.mock.calls.flatMap(([elements]) => elements)).toContain(dynamicImage);
   });
 
   it("reconsiders tracked elements after resize without marking an attribute change", () => {

@@ -1,7 +1,7 @@
 import { classifyElement } from "../media/classifier";
 import { resolveDescription } from "../media/description";
 import { NativeVideoController } from "../media/native-video";
-import { ProviderFrameController } from "../media/provider-frames";
+import { isSupportedVideoFrame, ProviderFrameController } from "../media/provider-frames";
 import {
   ProtectionRenderer,
   type ProtectionHandle,
@@ -17,10 +17,15 @@ import { DocumentObserver } from "./document-observer";
 declare const __DEV__: boolean;
 
 export interface DocumentObserverPort {
-  start(onCandidates: (elements: readonly Element[]) => void): void;
+  start(
+    onCandidates: (elements: readonly Element[]) => void,
+    onLayoutChange?: () => void,
+  ): void;
   scan(root: ParentNode): void;
   stop(): void;
   hadRelevantAttributeChange?(element: Element): boolean;
+  trackLayout?(element: Element): void;
+  untrackLayout?(element: Element): void;
 }
 
 interface RendererPort {
@@ -36,9 +41,11 @@ interface NativeVideoPort {
 
 interface ProviderFramePort {
   gate(frame: HTMLIFrameElement): void;
-  release(frame: HTMLIFrameElement): void;
+  release(frame: HTMLIFrameElement): void | Promise<void>;
   regate(frame: HTMLIFrameElement): void;
-  restore(frame: HTMLIFrameElement): void;
+  restore(frame: HTMLIFrameElement): void | Promise<void>;
+  trust?(frame: HTMLIFrameElement): void | Promise<void>;
+  forget?(frame: HTMLIFrameElement): void;
 }
 
 export interface ContentControllerDependencies {
@@ -102,7 +109,7 @@ export class ContentController {
     if (this.started) this.stop();
     this.started = true;
     this.mode = context.mode;
-    if (this.mode !== "trusted") this.startObservation();
+    this.startObservation();
   }
 
   applyMode(mode: SiteMode): void {
@@ -110,14 +117,15 @@ export class ContentController {
 
     if (mode === "trusted") {
       this.mode = mode;
-      this.stopObservation();
       this.clearProtection();
+      this.observer.scan(this.document);
       return;
     }
 
     if (this.mode === "trusted") {
       this.mode = mode;
       this.startObservation();
+      this.observer.scan(this.document);
       return;
     }
 
@@ -149,9 +157,14 @@ export class ContentController {
   private startObservation(): void {
     if (this.observing) return;
     this.observing = true;
-    this.observer.start((elements) => {
-      for (const element of elements) this.processCandidate(element);
-    });
+    this.observer.start(
+      (elements) => {
+        for (const element of elements) this.processCandidate(element);
+      },
+      () => {
+        for (const record of this.records) record.handle.update();
+      },
+    );
     this.observer.scan(this.document);
   }
 
@@ -188,7 +201,8 @@ export class ContentController {
           }
 
           this.detachRecord(existing, false);
-          this.providerFrames.restore(element);
+          if (this.providerFrames.forget) this.providerFrames.forget(element);
+          else void this.providerFrames.restore(element);
           replaceSource(element, currentSource);
         } else {
           this.detachRecord(existing, false);
@@ -197,7 +211,11 @@ export class ContentController {
         }
       }
 
-      if (!element.isConnected || this.mode === "trusted") return;
+      if (!element.isConnected) return;
+      if (this.mode === "trusted") {
+        if (isSupportedVideoFrame(element)) void this.providerFrames.trust?.(element);
+        return;
+      }
       const candidate = this.classify(element);
       if (!candidate) {
         if (detachedCandidate) this.restoreMedia(detachedCandidate);
@@ -229,6 +247,7 @@ export class ContentController {
       }
       this.byElement.set(candidate.element, record);
       this.records.add(record);
+      this.observer.trackLayout?.(candidate.element);
     } catch (error) {
       if (prepared) this.restoreMedia(candidate);
       throw error;
@@ -253,7 +272,7 @@ export class ContentController {
     return undefined;
   }
 
-  private releaseRecord(record: ProtectionRecord): void {
+  private async releaseRecord(record: ProtectionRecord): Promise<void> {
     const { candidate } = record;
     if (candidate.kind === "native-video" && candidate.element instanceof HTMLVideoElement) {
       this.nativeVideo.release(candidate.element);
@@ -261,7 +280,7 @@ export class ContentController {
       candidate.kind === "video-iframe" &&
       candidate.element instanceof HTMLIFrameElement
     ) {
-      this.providerFrames.release(candidate.element);
+      await this.providerFrames.release(candidate.element);
       record.expectedProviderSource = candidate.element.getAttribute("src");
     }
   }
@@ -302,6 +321,7 @@ export class ContentController {
     record.handle.remove();
     this.records.delete(record);
     this.byElement.delete(record.candidate.element);
+    this.observer.untrackLayout?.(record.candidate.element);
     if (restore) this.restoreMedia(record.candidate);
   }
 

@@ -24,6 +24,8 @@ type LaunchedExtension = {
   page: Page;
   worker: Worker;
   unexpectedRequests: string[];
+  providerRequests: string[];
+  allowProviderAssets(): void;
 };
 
 async function launchExtension(
@@ -39,22 +41,70 @@ async function launchExtension(
     ],
   });
   const unexpectedRequests: string[] = [];
+  const providerRequests: string[] = [];
+  let providerAssetsAllowed = false;
   const providerFixtureUrls = new Set(options.providerFixtureUrls ?? []);
   context.on("request", (request) => {
     const url = request.url();
     if (isLocalRequest(url)) return;
-    if (providerFixtureUrls.has(url)) return;
+    if (isApprovedProviderFixture(url, providerFixtureUrls)) return;
+    if (providerAssetsAllowed && isProviderAsset(url)) return;
     unexpectedRequests.push(`${request.method()} ${request.resourceType()} ${url}`);
   });
-  for (const url of providerFixtureUrls) {
-    await context.route(url, (route) => route.fulfill({
-      body: "<!doctype html><html><body><h1>Local provider fixture</h1></body></html>",
-      contentType: "text/html",
-    }));
-  }
+  await context.route(/^https:\/\//, (route) => {
+    const url = route.request().url();
+    if (isApprovedProviderFixture(url, providerFixtureUrls)) {
+      providerRequests.push(url);
+      return route.fulfill({
+        body: "<!doctype html><html><body><h1>Local provider fixture</h1></body></html>",
+        contentType: "text/html",
+      });
+    }
+    if (providerAssetsAllowed && isProviderAsset(url)) {
+      return route.fulfill({ body: "", contentType: "application/octet-stream" });
+    }
+    return route.fallback();
+  });
   const worker = context.serviceWorkers()[0] ?? await context.waitForEvent("serviceworker");
   const page = context.pages()[0] ?? await context.newPage();
-  return { context, page, worker, unexpectedRequests };
+  return {
+    context,
+    page,
+    worker,
+    unexpectedRequests,
+    providerRequests,
+    allowProviderAssets: () => {
+      providerAssetsAllowed = true;
+    },
+  };
+}
+
+function isApprovedProviderFixture(url: string, approved: ReadonlySet<string>): boolean {
+  let candidate: URL;
+  try {
+    candidate = new URL(url);
+  } catch {
+    return false;
+  }
+  return [...approved].some((source) => {
+    const expected = new URL(source);
+    return candidate.origin === expected.origin && candidate.pathname === expected.pathname;
+  });
+}
+
+function isProviderAsset(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return host === "www.youtube.com" ||
+      host.endsWith(".youtube.com") ||
+      host.endsWith(".ytimg.com") ||
+      host === "fonts.gstatic.com" ||
+      host.endsWith(".googlevideo.com") ||
+      host === "player.vimeo.com" ||
+      host.endsWith(".vimeocdn.com");
+  } catch {
+    return false;
+  }
 }
 
 function isLocalRequest(url: string): boolean {
@@ -142,16 +192,64 @@ test("protects article images", async () => {
     await expect(page.locator("#first")).toHaveAttribute("data-eclipse-goggles-protected", "image");
     await expect(page.locator("#second")).toHaveAttribute("data-eclipse-goggles-protected", "image");
     await expect(page.locator(".icon")).not.toHaveAttribute("data-eclipse-goggles-protected", "image");
-    await expect(layers(page)).toHaveCount(2);
+    await expect(layers(page)).toHaveCount(3);
     await expect(layerWithText(page, "A moonlit lake beside dark hills")).toBeVisible();
 
-    await layerWithText(page, "A moonlit lake").getByRole("button", { name: "Reveal" }).click();
+    await layerWithText(page, "A moonlit lake").click();
     await expect(page.locator("#first")).not.toHaveAttribute("data-eclipse-goggles-protected", "image");
     await expect(page.locator("#second")).toHaveAttribute("data-eclipse-goggles-protected", "image");
 
     await layerWithText(page, "A red kite").focus();
     await page.keyboard.press("Enter");
     await expect(page.locator("#second")).not.toHaveAttribute("data-eclipse-goggles-protected", "image");
+  } finally {
+    await closeExtension(extension);
+  }
+});
+
+test("refreshes stale geometry after layout-only DOM mutations", async () => {
+  const extension = await launchExtension();
+  const { page } = extension;
+  try {
+    await page.goto(`${fixtureOrigin}/article.html`);
+    const target = page.locator("#first");
+    const layer = layerWithText(page, "A moonlit lake");
+    await assertAligned(target, layer);
+
+    await page.evaluate(() => {
+      const spacer = document.createElement("div");
+      spacer.id = "layout-spacer";
+      spacer.style.height = "173px";
+      document.querySelector("#first")!.before(spacer);
+    });
+
+    await assertAligned(target, layer);
+  } finally {
+    await closeExtension(extension);
+  }
+});
+
+test("protects media in existing and dynamically inserted open shadow roots", async () => {
+  const extension = await launchExtension();
+  const { page } = extension;
+  try {
+    await page.goto(`${fixtureOrigin}/article.html`);
+    const existing = page.locator("#open-shadow-host").locator("#shadow-image");
+    await expect(existing).toHaveAttribute("data-eclipse-goggles-protected", "image");
+
+    await page.evaluate(() => {
+      const host = document.createElement("aside");
+      host.id = "dynamic-shadow-host";
+      const image = document.createElement("img");
+      image.id = "dynamic-shadow-image";
+      image.alt = "A dynamic open shadow image";
+      Object.assign(image.style, { display: "block", width: "640px", height: "360px" });
+      image.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='360'%3E%3C/svg%3E";
+      host.attachShadow({ mode: "open" }).append(image);
+      document.body.append(host);
+    });
+    await expect(page.locator("#dynamic-shadow-host").locator("#dynamic-shadow-image"))
+      .toHaveAttribute("data-eclipse-goggles-protected", "image");
   } finally {
     await closeExtension(extension);
   }
@@ -175,6 +273,22 @@ test("protects dynamic and client-route media and removes every layer in Trusted
   }
 });
 
+test("protects media inserted by back-forward SPA navigation", async () => {
+  const extension = await launchExtension();
+  const { page } = extension;
+  try {
+    await page.goto(`${fixtureOrigin}/dynamic-feed.html`);
+    await page.evaluate(() => (window as typeof window & { replaceRoute(): void }).replaceRoute());
+    await expect(page.locator("#route-image")).toHaveAttribute("data-eclipse-goggles-protected", "image");
+
+    await page.goBack();
+
+    await expect(page.locator("#history-image")).toHaveAttribute("data-eclipse-goggles-protected", "image");
+  } finally {
+    await closeExtension(extension);
+  }
+});
+
 test("Strict mode re-protects a revealed image after two seconds fully away", async () => {
   const extension = await launchExtension();
   const { page, worker } = extension;
@@ -182,7 +296,7 @@ test("Strict mode re-protects a revealed image after two seconds fully away", as
     await setMode(worker, "strict");
     await page.goto(`${fixtureOrigin}/dynamic-feed.html`);
     await expect(page.locator("#strict-image")).toHaveAttribute("data-eclipse-goggles-protected", "image");
-    await layerWithText(page, "A lighthouse").getByRole("button", { name: "Reveal" }).click();
+    await layerWithText(page, "A lighthouse").click();
     await expect(page.locator("#strict-image")).not.toHaveAttribute("data-eclipse-goggles-protected", "image");
 
     const scrolledAt = Date.now();
@@ -221,7 +335,7 @@ test("secures native autoplay video and reveal never starts or unmutes it", asyn
     });
     expect(coveredTarget).toBe(true);
 
-    await layerWithText(page, "A looping color field").getByRole("button", { name: "Reveal" }).click();
+    await layerWithText(page, "A looping color field").click();
     await expect(video).not.toHaveAttribute("data-eclipse-goggles-protected", "video");
     expect(await video.evaluate((node) => {
       const media = node as HTMLVideoElement;
@@ -237,7 +351,7 @@ test("secures native autoplay video and reveal never starts or unmutes it", asyn
   }
 });
 
-test("gates and exactly restores YouTube and Vimeo frames without real external traffic", async () => {
+test("withholds provider requests until one exact trusted reveal and re-protection", async () => {
   const extension = await launchExtension({ providerFixtureUrls: videoProviderUrls });
   const { page } = extension;
   try {
@@ -246,12 +360,45 @@ test("gates and exactly restores YouTube and Vimeo frames without real external 
     const vimeo = page.locator("#vimeo");
     await expect(youtube).toHaveAttribute("src", "about:blank");
     await expect(vimeo).toHaveAttribute("src", "about:blank");
+    expect(extension.providerRequests).toEqual([]);
 
-    await layerWithText(page, "YouTube astronomy video").getByRole("button", { name: "Reveal" }).click();
-    await expect(youtube).toHaveAttribute("src", "https://www.youtube.com/embed/eclipse-test?autoplay=1");
-    await vimeo.scrollIntoViewIfNeeded();
-    await layerWithText(page, "Vimeo landscape video").getByRole("button", { name: "Reveal" }).click();
-    await expect(vimeo).toHaveAttribute("src", "https://player.vimeo.com/video/123456789?autoplay=1");
+    extension.allowProviderAssets();
+    const selectedNavigation = page.waitForEvent("framenavigated", {
+      predicate: (frame) => frame.url().includes("/embed/eclipse-test") &&
+        frame.url().includes("eg_eclipse_goggles="),
+    });
+    await page.getByRole("button", {
+      name: "Reveal protected media: YouTube astronomy video",
+      exact: true,
+    }).click();
+    await expect.poll(() => extension.providerRequests).toHaveLength(1);
+    expect(new URL(extension.providerRequests[0]!).pathname).toBe("/embed/eclipse-test");
+    const authorized = new URL(extension.providerRequests[0]!);
+    expect(authorized.searchParams.get("autoplay")).toBe("0");
+    expect(authorized.searchParams.get("eg_eclipse_goggles")).toBeTruthy();
+    await selectedNavigation;
+    await expect.poll(() => extension.worker.evaluate(
+      () => chrome.declarativeNetRequest.getSessionRules(),
+    )).toEqual([]);
+    await expect(page.locator("#youtube-twin")).toHaveAttribute("src", "about:blank");
+    await expect(vimeo).toHaveAttribute("src", "about:blank");
+
+    await page.getByRole("button", { name: "Protect again", exact: true }).click({ force: true });
+    await expect(youtube).toHaveAttribute("src", "about:blank");
+    await page.evaluate(({ original, nonce }) => {
+      const sources: Array<[string, string]> = [
+        ["later-same-url", original],
+        ["later-same-nonce", nonce],
+      ];
+      for (const [id, source] of sources) {
+        const later = document.createElement("iframe");
+        later.id = id;
+        later.src = source;
+        document.body.append(later);
+      }
+    }, { original: youtubeFixtureUrl, nonce: authorized.href });
+    await page.waitForTimeout(200);
+    expect(extension.providerRequests).toHaveLength(1);
 
   } finally {
     await closeExtension(extension);
@@ -274,8 +421,20 @@ test("protects native video in a same-origin child and does not double-protect p
     const providerNavigation = page.waitForEvent("framenavigated", {
       predicate: (frame) => frame.url().includes("youtube.com/embed/child-test"),
     });
-    await layerWithText(page, "Recognized provider frame").getByRole("button", { name: "Reveal" }).click();
-    await expect(provider).toHaveAttribute("src", "https://www.youtube.com/embed/child-test");
+    extension.allowProviderAssets();
+    await layerWithText(page, "Recognized provider frame").click();
+    await expect.poll(async () => {
+      const source = new URL((await provider.getAttribute("src"))!);
+      return {
+        path: source.origin + source.pathname,
+        autoplay: source.searchParams.get("autoplay"),
+        authorized: Boolean(source.searchParams.get("eg_eclipse_goggles")),
+      };
+    }).toEqual({
+      path: "https://www.youtube.com/embed/child-test",
+      autoplay: "0",
+      authorized: true,
+    });
     const providerChild = await providerNavigation;
     await expect(providerChild.locator("[data-eclipse-goggles-root]")).toHaveCount(0);
   } finally {
@@ -321,17 +480,23 @@ test("has visible keyboard focus, specified caption contrast, and only approved 
   try {
     await page.goto(`${fixtureOrigin}/article.html`);
     const layer = layerWithText(page, "A moonlit lake");
-    let reachedProtectedLayer = false;
-    for (let step = 0; step < 8 && !reachedProtectedLayer; step += 1) {
-      await page.keyboard.press("Tab");
-      reachedProtectedLayer = await layer.evaluate((node) => {
-        const root = node.getRootNode();
-        return root instanceof ShadowRoot &&
-          root.activeElement === node &&
-          document.activeElement === root.host;
-      });
-    }
-    expect(reachedProtectedLayer, "Tab navigation did not reach the protected media layer").toBe(true);
+    await expect(page.getByRole("button", {
+      name: "Reveal protected media: A moonlit lake beside dark hills",
+      exact: true,
+    })).toHaveCount(1);
+    await expect(layer.locator("button, a, input, select, textarea, [role=button]")).toHaveCount(0);
+    await page.locator("#before-media").focus();
+    await page.keyboard.press("Tab");
+    expect(await layer.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#after-first-media")).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    expect(await layer.evaluate((node) => {
+      const root = node.getRootNode();
+      return root instanceof ShadowRoot &&
+        root.activeElement === node &&
+        document.activeElement === root.host;
+    }), "Tab navigation did not return to the protected media layer").toBe(true);
     const presentation = await layer.evaluate((node) => {
       const layerStyle = getComputedStyle(node);
       const captionStyle = getComputedStyle(node.querySelector(".eg-caption")!);

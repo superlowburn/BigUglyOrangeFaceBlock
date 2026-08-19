@@ -10,6 +10,19 @@ function frame(source?: string): HTMLIFrameElement {
   return element;
 }
 
+function authorization() {
+  let nextGrant = 1;
+  return {
+    authorize: vi.fn(async (source: string, disableAutoplay: boolean) => {
+      const url = new URL(source);
+      if (disableAutoplay) url.searchParams.set("autoplay", "0");
+      url.searchParams.set("eg_eclipse_goggles", "unit-token");
+      return { grantId: nextGrant++, source: url.href };
+    }),
+    revoke: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
 describe("isSupportedVideoFrame", () => {
   it.each([
     "https://www.youtube.com/embed/abc123",
@@ -37,8 +50,9 @@ describe("isSupportedVideoFrame", () => {
 });
 
 describe("ProviderFrameController", () => {
-  it("gates a supported frame idempotently and restores its exact source on release", () => {
-    const controller = new ProviderFrameController();
+  it("gates a supported frame idempotently and releases one autoplay-disabled source", async () => {
+    const access = authorization();
+    const controller = new ProviderFrameController(access);
     const originalSource =
       "https://www.youtube-nocookie.com/embed/abc123?autoplay=1&start=4#chapter";
     const element = frame(originalSource);
@@ -54,27 +68,39 @@ describe("ProviderFrameController", () => {
     controller.gate(element);
     expect(element.getAttribute("src")).toBe("about:blank");
 
-    controller.release(element);
-    expect(element.getAttribute("src")).toBe(originalSource);
+    await controller.release(element);
+    const released = new URL(element.getAttribute("src")!);
+    expect(released.origin + released.pathname).toBe(
+      "https://www.youtube-nocookie.com/embed/abc123",
+    );
+    expect(released.searchParams.get("autoplay")).toBe("0");
+    expect(released.searchParams.get("eg_eclipse_goggles")).toBe("unit-token");
+    expect(released.hash).toBe("#chapter");
     expect(contentWindowRead).not.toHaveBeenCalled();
   });
 
-  it("regates a released frame and restore returns its exact original source", () => {
-    const controller = new ProviderFrameController();
+  it("regates a released frame and restore authorizes its original source", async () => {
+    const access = authorization();
+    const controller = new ProviderFrameController(access);
     const originalSource = "https://player.vimeo.com/video/123456?autopause=0";
     const element = frame(originalSource);
     controller.gate(element);
-    controller.release(element);
+    await controller.release(element);
 
     controller.regate(element);
     expect(element.getAttribute("src")).toBe("about:blank");
 
-    controller.restore(element);
-    expect(element.getAttribute("src")).toBe(originalSource);
+    await controller.restore(element);
+    const restored = new URL(element.getAttribute("src")!);
+    expect(restored.origin + restored.pathname).toBe("https://player.vimeo.com/video/123456");
+    expect(restored.searchParams.get("autopause")).toBe("0");
+    expect(restored.searchParams.get("autoplay")).toBeNull();
+    expect(restored.searchParams.get("eg_eclipse_goggles")).toBe("unit-token");
+    expect(access.revoke).toHaveBeenCalled();
   });
 
   it("does not touch unrecognized frames", () => {
-    const controller = new ProviderFrameController();
+    const controller = new ProviderFrameController(authorization());
     const originalSource = "https://www.youtube.com/watch?v=abc123";
     const element = frame(originalSource);
 

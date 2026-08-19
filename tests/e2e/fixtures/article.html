@@ -11,8 +11,19 @@
   </head>
   <body>
     <h1>Article fixture</h1>
+    <button id="before-media">Before media</button>
     <img class="icon" alt="Small status icon" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Crect width='24' height='24' fill='navy'/%3E%3C/svg%3E">
     <img id="first" class="content" alt="A moonlit lake beside dark hills" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='360'%3E%3Crect width='640' height='360' fill='%238bb7cf'/%3E%3C/svg%3E">
+    <button id="after-first-media">After first media</button>
     <img id="second" class="content" alt="A red kite above a green field" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='360'%3E%3Crect width='640' height='360' fill='%2378a868'/%3E%3C/svg%3E">
+    <div id="open-shadow-host"></div>
+    <script>
+      const shadowImage = document.createElement("img");
+      shadowImage.id = "shadow-image";
+      shadowImage.className = "content";
+      shadowImage.alt = "An image inside an open shadow root";
+      shadowImage.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='360'%3E%3Crect width='640' height='360' fill='%238b75aa'/%3E%3C/svg%3E";
+      document.querySelector("#open-shadow-host").attachShadow({ mode: "open" }).append(shadowImage);
+    </script>
   </body>
 </html>

@@ -94,6 +94,29 @@ describe("ProtectionRenderer", () => {
     expect(layer?.style.height).toBe("360px");
   });
 
+  it("exposes one native control adjacent to the protected media in tab order", () => {
+    const before = document.createElement("button");
+    before.textContent = "Before";
+    const image = document.createElement("img");
+    const after = document.createElement("button");
+    after.textContent = "After";
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(20, 30, 640, 360));
+    document.body.append(before, image, after);
+    const renderer = new ProtectionRenderer();
+
+    protect(renderer, image);
+
+    const host = image.nextElementSibling as HTMLElement | null;
+    const layer = renderer.debugLayerFor(image);
+    expect(host?.hasAttribute("data-eclipse-goggles-root")).toBe(true);
+    expect(host?.nextElementSibling).toBe(after);
+    expect(layer?.tagName).toBe("BUTTON");
+    expect(layer?.querySelectorAll("button, a, input, select, textarea, [role=button]")).toHaveLength(0);
+    expect(layer?.getAttribute("aria-label")).toBe(
+      "Reveal protected media: A black audio component",
+    );
+  });
+
   it("reveals only the keyboard-activated item once", () => {
     const first = document.createElement("img");
     const second = document.createElement("img");
@@ -103,13 +126,12 @@ describe("ProtectionRenderer", () => {
     const onFirstReveal = vi.fn();
     const onSecondReveal = vi.fn();
     const renderer = new ProtectionRenderer({
-      trustedActivation: (event) => event instanceof KeyboardEvent && event.key === "Enter",
+      trustedActivation: (event) => event instanceof MouseEvent && event.type === "click",
     });
     const firstHandle = protect(renderer, first, { onReveal: onFirstReveal });
     const secondHandle = protect(renderer, second, { onReveal: onSecondReveal });
 
-    renderer.debugLayerFor(first)?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    renderer.debugLayerFor(first)?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    renderer.debugLayerFor(first)?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
     expect(onFirstReveal).toHaveBeenCalledTimes(1);
     expect(onSecondReveal).not.toHaveBeenCalled();
@@ -174,7 +196,7 @@ describe("ProtectionRenderer", () => {
     firstHandle.reveal();
     secondHandle.reveal();
 
-    const protectAgain = renderer.debugLayerFor(first)?.querySelector<HTMLButtonElement>("button");
+    const protectAgain = renderer.debugLayerFor(first);
     expect(protectAgain?.textContent).toBe("Protect again");
     protectAgain?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
@@ -239,7 +261,7 @@ describe("ProtectionRenderer", () => {
 
     protect(renderer, image);
 
-    const button = renderer.debugLayerFor(image)?.querySelector<HTMLButtonElement>("button");
+    const button = renderer.debugLayerFor(image);
     expect(button?.textContent).toBe("Reveal image");
     expect(button?.getAttribute("aria-label")).toContain("A black audio component");
     expect(renderer.debugLayerFor(image)?.classList.contains("eg-compact")).toBe(true);
@@ -257,7 +279,7 @@ describe("ProtectionRenderer", () => {
     handle.update();
     frames.flush();
 
-    const button = renderer.debugLayerFor(image)?.querySelector<HTMLButtonElement>("button");
+    const button = renderer.debugLayerFor(image);
     expect(button?.textContent).toBe("Reveal image");
     expect(button?.getAttribute("aria-label")).toContain("A black audio component");
   });

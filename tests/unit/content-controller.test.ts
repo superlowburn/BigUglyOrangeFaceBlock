@@ -90,6 +90,7 @@ function controllerHarness(
     release: vi.fn(),
     regate: vi.fn(),
     restore: vi.fn(),
+    trust: vi.fn(),
   };
   const classify = vi.fn((element: Element) => classifications.get(element) ?? null);
   const resolveDescription = vi.fn((media: MediaCandidate) => `Description for ${media.kind}`);
@@ -127,14 +128,19 @@ beforeEach(() => {
 });
 
 describe("ContentController", () => {
-  it("starts Trusted mode without observing or protecting the document", () => {
+  it("observes Trusted mode only to authorize dynamic provider frames without protection", () => {
     const image = document.createElement("img");
+    const frame = document.createElement("iframe");
+    frame.src = "https://www.youtube.com/embed/trusted-dynamic";
+    document.body.append(image, frame);
     const harness = controllerHarness(new Map([[image, candidate(image, "image")]]));
 
     harness.controller.start({ origin: "https://news.example", mode: "trusted" });
+    harness.observer.emit([image, frame]);
 
-    expect(harness.observer.start).not.toHaveBeenCalled();
-    expect(harness.observer.scan).not.toHaveBeenCalled();
+    expect(harness.observer.start).toHaveBeenCalledTimes(1);
+    expect(harness.observer.scan).toHaveBeenCalledWith(document);
+    expect(harness.providerFrames.trust).toHaveBeenCalledWith(frame);
     expect(harness.renderer.protect).not.toHaveBeenCalled();
   });
 
@@ -235,7 +241,8 @@ describe("ContentController", () => {
 
     harness.controller.applyMode("trusted");
 
-    expect(harness.observer.stop).toHaveBeenCalledTimes(1);
+    expect(harness.observer.stop).not.toHaveBeenCalled();
+    expect(harness.observer.scan).toHaveBeenLastCalledWith(document);
     expect(harness.renderer.items.map(({ handle }) => handle.remove)).toSatisfy(
       (removes: Array<ReturnType<typeof vi.fn>>) =>
         removes.every((remove) => remove.mock.calls.length === 1),
@@ -367,12 +374,20 @@ describe("ContentController", () => {
     expect(harness.renderer.items[1]?.candidate).toBe(imageCandidate);
   });
 
-  it("regates an externally replaced provider source and reveals that exact new source", () => {
+  it("regates an externally replaced provider source and reveals that exact new source", async () => {
     const frame = document.createElement("iframe");
     frame.setAttribute("src", "https://www.youtube.com/embed/first?start=10#one");
     document.body.append(frame);
     const media = candidate(frame, "video-iframe");
-    const realProviderFrames = new ProviderFrameController();
+    const realProviderFrames = new ProviderFrameController({
+      authorize: async (source, disableAutoplay) => {
+        const url = new URL(source);
+        if (disableAutoplay) url.searchParams.set("autoplay", "0");
+        url.searchParams.set("eg_eclipse_goggles", "controller-token");
+        return { grantId: 91, source: url.href };
+      },
+      revoke: vi.fn().mockResolvedValue(undefined),
+    });
     const harness = controllerHarness(new Map([[frame, media]]), {
       providerFrames: realProviderFrames,
     });
@@ -388,7 +403,13 @@ describe("ContentController", () => {
     expect(harness.renderer.protect).toHaveBeenCalledTimes(2);
     expect(frame.getAttribute("src")).toBe("about:blank");
     harness.renderer.items[1]?.handle.reveal();
-    expect(frame.getAttribute("src")).toBe(replacement);
+    await vi.waitFor(() => {
+      const released = new URL(frame.getAttribute("src")!);
+      expect(released.origin + released.pathname).toBe("https://player.vimeo.com/video/456");
+      expect(released.searchParams.get("autoplay")).toBe("0");
+      expect(released.searchParams.get("eg_eclipse_goggles")).toBe("controller-token");
+      expect(released.hash).toBe("#two");
+    });
   });
 });
 

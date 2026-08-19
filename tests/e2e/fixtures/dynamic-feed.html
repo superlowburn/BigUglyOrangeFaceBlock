@@ -31,6 +31,13 @@
         `;
         history.pushState({}, "", "/dynamic-feed.html?route=next");
       };
+
+      window.addEventListener("popstate", () => {
+        document.querySelector("#app").innerHTML = `
+          <h1>Back-forward destination</h1>
+          <img id="history-image" class="media" alt="A ferry returning through fog" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='360'%3E%3Crect width='640' height='360' fill='%23758491'/%3E%3C/svg%3E">
+        `;
+      });
     </script>
   </body>
 </html>

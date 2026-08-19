@@ -52,13 +52,59 @@ export function classifyElement(
   if (
     hasBothDimensions(width, height, undecoratedImageMinimum) &&
     env.style(element).backgroundImage !== "none" &&
-    !element.textContent?.trim() &&
+    !hasRenderedText(element, env) &&
     !element.querySelector(interactiveDescendant)
   ) {
     return { element, kind: "background-image" };
   }
 
   return null;
+}
+
+function hasRenderedText(element: HTMLElement, env: ClassificationEnvironment): boolean {
+  const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node) {
+    if (node.textContent?.trim() && node.parentElement && isRendered(node.parentElement, element, env)) {
+      return true;
+    }
+    node = walker.nextNode();
+  }
+  return false;
+}
+
+function isRendered(
+  textHost: HTMLElement,
+  boundary: HTMLElement,
+  env: ClassificationEnvironment,
+): boolean {
+  let current: HTMLElement | null = textHost;
+  while (current) {
+    const style = env.style(current);
+    if (
+      current.hidden ||
+      current.getAttribute("aria-hidden") === "true" ||
+      style.display === "none" ||
+      style.visibility === "hidden" ||
+      style.visibility === "collapse" ||
+      style.opacity === "0"
+    ) {
+      return false;
+    }
+    if (current === boundary) break;
+    current = current.parentElement;
+  }
+
+  const style = env.style(textHost);
+  const box = env.box(textHost);
+  const clipped =
+    style.position === "absolute" &&
+    box.width <= 1 &&
+    box.height <= 1 &&
+    style.overflow === "hidden" &&
+    ((style.clip && style.clip !== "auto") ||
+      (style.clipPath && style.clipPath !== "none"));
+  return !clipped;
 }
 
 function hasBothDimensions(width: number, height: number, minimum: number): boolean {

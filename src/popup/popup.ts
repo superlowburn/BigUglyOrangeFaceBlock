@@ -133,8 +133,13 @@ export async function mountPopup(root: HTMLElement, chromeApi: PopupChromeApi): 
           type: "policy:set-tab",
           tabId,
           mode: option.mode,
+          expectedOrigin: initialResponse.origin,
         });
-        if (!isPolicyContext(response) || response.mode !== option.mode) {
+        if (
+          !isPolicyContext(response) ||
+          response.mode !== option.mode ||
+          response.origin !== initialResponse.origin
+        ) {
           throw new TypeError("Invalid policy response");
         }
         confirmedMode = response.mode;
