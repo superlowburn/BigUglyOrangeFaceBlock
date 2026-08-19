@@ -1,10 +1,10 @@
 import type { MediaCandidate, MediaKind } from "../shared/media-types";
 
 const fallbackDescriptions: Record<MediaKind, string> = {
-  image: "Image",
-  "background-image": "Background image",
-  "native-video": "Video",
-  "video-iframe": "Embedded video",
+  image: "Image protected by Eclipse Goggles",
+  "background-image": "Background image protected by Eclipse Goggles",
+  "native-video": "Video protected by Eclipse Goggles",
+  "video-iframe": "Embedded video protected by Eclipse Goggles",
 };
 
 export function resolveDescription(candidate: MediaCandidate): string {

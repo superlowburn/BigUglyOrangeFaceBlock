@@ -28,7 +28,9 @@ export function classifyElement(
   }
 
   if (isSupportedVideoFrame(element)) {
-    return { element, kind: "video-iframe" };
+    return hasEitherDimension(width, height, videoMinimum)
+      ? { element, kind: "video-iframe" }
+      : null;
   }
 
   if (element instanceof HTMLInputElement && element.type.toLowerCase() === "image") {

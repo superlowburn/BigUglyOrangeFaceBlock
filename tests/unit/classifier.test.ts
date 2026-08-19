@@ -79,6 +79,14 @@ describe("classifyElement", () => {
     expect(classifyElement(element, env)).toMatchObject({ kind: "video-iframe" });
   });
 
+  it("ignores a supported video iframe below the 96px video boundary", () => {
+    const { env, setBox } = environment();
+    const element = youtubeIframe();
+    setBox(element, 95, 95);
+
+    expect(classifyElement(element, env)).toBeNull();
+  });
+
   it("recognizes only the supported exact-host video embeds", () => {
     const frame = (source: string) => {
       const element = document.createElement("iframe");

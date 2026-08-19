@@ -33,13 +33,17 @@ describe("resolveDescription", () => {
   });
 
   it("uses exact kind-specific fallback copy", () => {
-    expect(resolveDescription(candidate(document.createElement("img"), "image"))).toBe("Image");
-    expect(resolveDescription(candidate(document.createElement("div"), "background-image"))).toBe(
-      "Background image",
+    expect(resolveDescription(candidate(document.createElement("img"), "image"))).toBe(
+      "Image protected by Eclipse Goggles",
     );
-    expect(resolveDescription(candidate(document.createElement("video"), "native-video"))).toBe("Video");
+    expect(resolveDescription(candidate(document.createElement("div"), "background-image"))).toBe(
+      "Background image protected by Eclipse Goggles",
+    );
+    expect(resolveDescription(candidate(document.createElement("video"), "native-video"))).toBe(
+      "Video protected by Eclipse Goggles",
+    );
     expect(resolveDescription(candidate(document.createElement("iframe"), "video-iframe"))).toBe(
-      "Embedded video",
+      "Embedded video protected by Eclipse Goggles",
     );
   });
 
