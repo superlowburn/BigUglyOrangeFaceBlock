@@ -87,6 +87,18 @@ describe("classifyElement", () => {
     expect(classifyElement(element, env)).toBeNull();
   });
 
+  it("classifies supported frames when either dimension reaches the 96px boundary", () => {
+    const { env, setBox } = environment();
+    const youtube = youtubeIframe();
+    const vimeo = document.createElement("iframe");
+    vimeo.src = "https://player.vimeo.com/video/123456";
+    setBox(youtube, 96, 95);
+    setBox(vimeo, 95, 96);
+
+    expect(classifyElement(youtube, env)).toMatchObject({ kind: "video-iframe" });
+    expect(classifyElement(vimeo, env)).toMatchObject({ kind: "video-iframe" });
+  });
+
   it("recognizes only the supported exact-host video embeds", () => {
     const frame = (source: string) => {
       const element = document.createElement("iframe");
