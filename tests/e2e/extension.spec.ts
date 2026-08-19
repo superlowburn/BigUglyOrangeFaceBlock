@@ -18,6 +18,7 @@ const youtubeFixtureUrl = "https://www.youtube.com/embed/eclipse-test?autoplay=1
 const vimeoFixtureUrl = "https://player.vimeo.com/video/123456789?autoplay=1";
 const youtubeChildFixtureUrl = "https://www.youtube.com/embed/child-test";
 const videoProviderUrls = [youtubeFixtureUrl, vimeoFixtureUrl] as const;
+const acceptanceWindow = { width: 427, height: 240 } as const;
 
 type LaunchedExtension = {
   context: BrowserContext;
@@ -33,9 +34,10 @@ async function launchExtension(
 ): Promise<LaunchedExtension> {
   const context = await chromium.launchPersistentContext("", {
     headless: false,
-    viewport: { width: 1100, height: 800 },
+    viewport: acceptanceWindow,
     ...(options.deviceScaleFactor === undefined ? {} : { deviceScaleFactor: options.deviceScaleFactor }),
     args: [
+      `--window-size=${acceptanceWindow.width},${acceptanceWindow.height}`,
       `--disable-extensions-except=${extensionPath}`,
       `--load-extension=${extensionPath}`,
     ],
@@ -167,6 +169,22 @@ test("fixture server is loopback-only and rejects traversal outside fixtures", a
   expect(await rawRequest("/%2e%2e/package.json")).toBe(400);
   expect(await rawRequest("/package.json")).toBe(404);
   expect(await rawRequest("/")).toBe(200);
+});
+
+test("launches the loaded extension in the compact acceptance window", async () => {
+  const extension = await launchExtension();
+  try {
+    const dimensions = await extension.page.evaluate(() => ({
+      width: window.innerWidth,
+      height: window.innerHeight,
+    }));
+    expect(dimensions).toEqual({
+      width: acceptanceWindow.width,
+      height: acceptanceWindow.height,
+    });
+  } finally {
+    await closeExtension(extension);
+  }
 });
 
 test("privacy enforcement rejects an unapproved provider-format URL", async () => {
@@ -367,10 +385,13 @@ test("withholds provider requests until one exact trusted reveal and re-protecti
       predicate: (frame) => frame.url().includes("/embed/eclipse-test") &&
         frame.url().includes("eg_eclipse_goggles="),
     });
-    await page.getByRole("button", {
+    const youtubeReveal = page.getByRole("button", {
       name: "Reveal protected media: YouTube astronomy video",
       exact: true,
-    }).click();
+    });
+    await youtube.scrollIntoViewIfNeeded();
+    await assertAligned(youtube, youtubeReveal);
+    await youtubeReveal.click();
     await expect.poll(() => extension.providerRequests).toHaveLength(1);
     expect(new URL(extension.providerRequests[0]!).pathname).toBe("/embed/eclipse-test");
     const authorized = new URL(extension.providerRequests[0]!);
@@ -383,7 +404,9 @@ test("withholds provider requests until one exact trusted reveal and re-protecti
     await expect(page.locator("#youtube-twin")).toHaveAttribute("src", "about:blank");
     await expect(vimeo).toHaveAttribute("src", "about:blank");
 
-    await page.getByRole("button", { name: "Protect again", exact: true }).click({ force: true });
+    const reprotect = page.getByRole("button", { name: "Protect again", exact: true });
+    await reprotect.focus();
+    await reprotect.press("Enter");
     await expect(youtube).toHaveAttribute("src", "about:blank");
     await page.evaluate(({ original, nonce }) => {
       const sources: Array<[string, string]> = [
