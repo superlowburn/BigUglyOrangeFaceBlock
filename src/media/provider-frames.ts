@@ -117,12 +117,34 @@ export class ProviderFrameController {
       return;
     }
     if (state) {
-      state.version += 1;
-      await this.revoke(state);
+      const operation = this.reloadTrusted(frame, state, originalSource);
+      state.inflight = operation;
+      try {
+        await operation;
+      } finally {
+        if (state.inflight === operation) delete state.inflight;
+      }
+      return;
     }
     state = { originalSource, version: 0 };
     this.states.set(frame, state);
     this.activeFrames.add(frame);
+    state.ready = this.environment.prepare(frame);
+    await state.ready;
+    if (this.states.get(frame) !== state) return;
+    await this.loadAuthorized(frame, state, false);
+  }
+
+  private async reloadTrusted(
+    frame: HTMLIFrameElement,
+    previous: ProviderFrameState,
+    originalSource: string,
+  ): Promise<void> {
+    previous.version += 1;
+    await this.revoke(previous);
+    if (this.states.get(frame) !== previous) return;
+    const state: ProviderFrameState = { originalSource, version: 0 };
+    this.states.set(frame, state);
     state.ready = this.environment.prepare(frame);
     await state.ready;
     if (this.states.get(frame) !== state) return;

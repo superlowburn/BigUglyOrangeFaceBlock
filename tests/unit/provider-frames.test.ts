@@ -152,9 +152,17 @@ describe("ProviderFrameController", () => {
     const element = frame(originalSource);
     await controller.trust(element);
 
+    let finishRevoke!: () => void;
+    access.revoke.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      finishRevoke = resolve;
+    }));
     element.setAttribute("src", originalSource);
-    await controller.trust(element);
-    await controller.trust(element);
+    const firstReload = controller.trust(element);
+    const duplicateReload = controller.trust(element);
+    await Promise.resolve();
+    await Promise.resolve();
+    finishRevoke();
+    await Promise.all([firstReload, duplicateReload]);
 
     expect(access.authorize).toHaveBeenCalledTimes(2);
     expect(browser.navigate).toHaveBeenCalledTimes(2);
