@@ -50,4 +50,34 @@ describe("handleExtensionMessage", () => {
       ),
     ).resolves.toEqual({ error: "unsupported-page" });
   });
+
+  it("rejects malformed runtime messages without using extension APIs", async () => {
+    const deps = {
+      storage: { get: vi.fn(), set: vi.fn() },
+      tabs: { get: vi.fn() },
+    };
+
+    await expect(handleExtensionMessage({}, {}, deps)).resolves.toEqual({
+      error: "invalid-message",
+    });
+    expect(deps.tabs.get).not.toHaveBeenCalled();
+    expect(deps.storage.set).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid set-tab modes without writing policy storage", async () => {
+    const deps = {
+      storage: { get: vi.fn(), set: vi.fn() },
+      tabs: { get: vi.fn() },
+    };
+
+    await expect(
+      handleExtensionMessage(
+        { type: "policy:set-tab", tabId: 7, mode: "untrusted" },
+        {},
+        deps,
+      ),
+    ).resolves.toEqual({ error: "invalid-message" });
+    expect(deps.tabs.get).not.toHaveBeenCalled();
+    expect(deps.storage.set).not.toHaveBeenCalled();
+  });
 });
