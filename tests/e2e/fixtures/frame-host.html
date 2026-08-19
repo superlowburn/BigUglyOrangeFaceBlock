@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Frame fixture</title>
+    <style>
+      iframe { display: block; width: 720px; height: 520px; margin: 20px; border: 1px solid #333; }
+    </style>
+  </head>
+  <body>
+    <iframe id="same-origin" title="Same-origin media frame" src="/video.html?nested=1"></iframe>
+    <iframe id="provider" title="Recognized provider frame" src="https://www.youtube.com/embed/child-test"></iframe>
+  </body>
+</html>

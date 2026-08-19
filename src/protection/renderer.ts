@@ -114,6 +114,7 @@ export class ProtectionRenderer {
     candidate.element.addEventListener("mouseleave", record.onMouseLeave);
 
     this.records.set(candidate.element, record);
+    markProtected(candidate);
     const box = candidate.element.getBoundingClientRect();
     this.renderProtected(record, box);
     this.updateRecord(record, box);
@@ -169,6 +170,7 @@ export class ProtectionRenderer {
     record.layer.removeAttribute("aria-label");
     record.layer.tabIndex = -1;
     record.layer.replaceChildren(this.reprotectButton());
+    record.candidate.element.removeAttribute("data-eclipse-goggles-protected");
     record.onReveal();
     if (record.mode === "strict") {
       record.stopStrictWatch = this.createStrictGuard().watch(record.candidate.element, () => {
@@ -183,6 +185,7 @@ export class ProtectionRenderer {
     record.stopStrictWatch?.();
     record.stopStrictWatch = null;
     this.renderProtected(record);
+    markProtected(record.candidate);
     record.onReprotect();
   }
 
@@ -277,6 +280,7 @@ export class ProtectionRenderer {
     record.stopStrictWatch = null;
     this.dirtyRecords.delete(record);
     record.layer.remove();
+    record.candidate.element.removeAttribute("data-eclipse-goggles-protected");
     record.candidate.element.removeEventListener("mouseenter", record.onMouseEnter);
     record.candidate.element.removeEventListener("mouseleave", record.onMouseLeave);
     if (this.records.get(record.candidate.element) === record) this.records.delete(record.candidate.element);
@@ -299,4 +303,11 @@ function mediaLabel(kind: MediaKind): "image" | "video" {
 
 function layerCompact(layer: HTMLElement): boolean {
   return layer.classList.contains("eg-compact");
+}
+
+function markProtected(candidate: MediaCandidate): void {
+  candidate.element.setAttribute(
+    "data-eclipse-goggles-protected",
+    mediaLabel(candidate.kind),
+  );
 }

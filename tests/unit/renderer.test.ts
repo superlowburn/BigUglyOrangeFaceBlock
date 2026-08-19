@@ -82,6 +82,10 @@ describe("ProtectionRenderer", () => {
     expect(root?.shadowRoot).not.toBeNull();
     expect(root?.querySelector("[data-eclipse-goggles-root]")).toBeNull();
     expect(handle.isRevealed()).toBe(false);
+    expect(image.getAttribute("data-eclipse-goggles-protected")).toBe("image");
+    expect(image.getAttributeNames().filter((name) => name.startsWith("data-eclipse-goggles-"))).toEqual([
+      "data-eclipse-goggles-protected",
+    ]);
     expect(layer?.textContent).toContain("A black audio component");
     expect(layer?.querySelector("img")).toBeNull();
     expect(layer?.style.left).toBe("20px");
@@ -110,7 +114,9 @@ describe("ProtectionRenderer", () => {
     expect(onFirstReveal).toHaveBeenCalledTimes(1);
     expect(onSecondReveal).not.toHaveBeenCalled();
     expect(firstHandle.isRevealed()).toBe(true);
+    expect(first.hasAttribute("data-eclipse-goggles-protected")).toBe(false);
     expect(secondHandle.isRevealed()).toBe(false);
+    expect(second.getAttribute("data-eclipse-goggles-protected")).toBe("image");
   });
 
   it("rejects page-dispatched synthetic pointer activation", () => {

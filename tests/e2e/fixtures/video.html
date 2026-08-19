@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Video fixture</title>
+    <style>
+      body { margin: 24px; }
+      video, iframe { display: block; width: 640px; height: 360px; margin: 20px 0; border: 0; }
+    </style>
+  </head>
+  <body>
+    <video id="native-video" autoplay playsinline aria-label="A looping color field"></video>
+    <iframe id="youtube" title="YouTube astronomy video" src="https://www.youtube.com/embed/eclipse-test?autoplay=1"></iframe>
+    <iframe id="vimeo" title="Vimeo landscape video" src="https://player.vimeo.com/video/123456789?autoplay=1"></iframe>
+    <script>
+      const video = document.querySelector("#native-video");
+      const canvas = document.createElement("canvas");
+      canvas.width = 16;
+      canvas.height = 9;
+      canvas.getContext("2d").fillRect(0, 0, 16, 9);
+      video.srcObject = canvas.captureStream(2);
+      video.play().catch(() => {});
+    </script>
+  </body>
+</html>
