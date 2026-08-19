@@ -1,6 +1,6 @@
-# Eclipse Goggles
+# Goggles
 
-Eclipse Goggles is a Chrome extension for intentional viewing. It frosts meaningful images, native videos, and recognized YouTube and Vimeo embeds until you choose one item to reveal. It does not try to decide whether an image was made by AI.
+Goggles is a Chrome extension for intentional viewing. It frosts meaningful images, native videos, and recognized YouTube and Vimeo embeds until you choose one item to reveal. It does not try to decide whether an image was made by AI.
 
 **Tagline:** They actually do something.
 
@@ -26,11 +26,11 @@ npm run verify
 
 If developing from a worktree, build there for testing; the path above is the intended main-checkout install path after integration.
 
-## Using Eclipse Goggles
+## Using Goggles
 
 The popup stores one mode for each site origin:
 
-- **Trusted — Show normally.** All Eclipse Goggles layers are removed immediately and new media is left alone.
+- **Trusted — Show normally.** All Goggles layers are removed immediately and new media is left alone.
 - **Protected — Frost individually.** This is the default. Reveal affects one item and lasts until the document is reloaded or replaced.
 - **Strict — Always re-protect.** Reveal still works one item at a time, but an item is frosted again after it has been completely outside the viewport for two continuous seconds.
 
@@ -40,11 +40,11 @@ Native video is paused and muted when protected. Reveal removes the input-blocki
 
 ## Privacy and security
 
-Classification, descriptions, policy, and reveal state stay on the device. Eclipse Goggles has no analytics or server and sends no page text, image, or usage event to an extension-owned service. Site mode is the only persisted product state. Reveal state lasts only for the current document. Page descriptions are inserted as text, never as HTML, and page-generated synthetic clicks cannot reveal media. A deliberately revealed YouTube or Vimeo frame navigates to that provider, as the original page intended, with autoplay disabled.
+Classification, descriptions, policy, and reveal state stay on the device. Goggles has no analytics or server and sends no page text, image, or usage event to an extension-owned service. Site mode is the only persisted product state. Reveal state lasts only for the current document. Page descriptions are inserted as text, never as HTML, and page-generated synthetic clicks cannot reveal media. A deliberately revealed YouTube or Vimeo frame navigates to that provider, as the original page intended, with autoplay disabled.
 
-The manifest requests `declarativeNetRequestWithHostAccess` plus host access only for `www.youtube.com`, `www.youtube-nocookie.com`, and `player.vimeo.com`. Those permissions are used solely to redirect recognized embed paths before network and install a temporary browser allow rule for one selected embed. The `webNavigation` permission is used to remove temporary allow rules before top-level navigation; Eclipse Goggles ignores the event URL and does not keep browsing history. The extension does not inspect request bodies. The inert redirect document is web-accessible because Chrome requires that for a subframe redirect, but it contains no script or data.
+The manifest requests `declarativeNetRequestWithHostAccess` plus host access only for `www.youtube.com`, `www.youtube-nocookie.com`, and `player.vimeo.com`. Those permissions are used solely to redirect recognized embed paths before network and install a temporary browser allow rule for one selected embed. The `webNavigation` permission is used to remove temporary allow rules before top-level navigation; Goggles ignores the event URL and does not keep browsing history. The extension does not inspect request bodies. The inert redirect document is web-accessible because Chrome requires that for a subframe redirect, but it contains no script or data.
 
-Eclipse Goggles is a best-effort attention and consent tool, not a security boundary against a page script deliberately tampering with extension-managed DOM. The selected provider iframe's unique URL is visible in its `src` attribute while the temporary allow rule exists; a hostile script that intentionally copies that URL is outside this first release's threat model. Allow rules expire after 10 seconds and are also removed on re-protection, page teardown, tab close, top-level navigation, and extension-worker startup.
+Goggles is a best-effort attention and consent tool, not a security boundary against a page script deliberately tampering with extension-managed DOM. The selected provider iframe's unique URL is visible in its `src` attribute while the temporary allow rule exists; a hostile script that intentionally copies that URL is outside this first release's threat model. Allow rules expire after 10 seconds and are also removed on re-protection, page teardown, tab close, top-level navigation, and extension-worker startup.
 
 The automated browser suite fulfills its fake YouTube and Vimeo destinations locally so acceptance tests never contact those providers. Ordinary image requests are not blocked in this first release; the extension controls presentation after Chrome loads page media.
 

@@ -103,7 +103,7 @@ export class ContentController {
     this.describe = dependencies.resolveDescription ?? resolveDescription;
     this.development = dependencies.development ?? isDevelopmentRuntime();
     this.logDiagnostic = dependencies.logDiagnostic ??
-      ((tagName, message) => console.warn(`Eclipse Goggles: ${tagName}: ${message}`));
+      ((tagName, message) => console.warn(`Goggles: ${tagName}: ${message}`));
   }
 
   start(context: PolicyContext): void {

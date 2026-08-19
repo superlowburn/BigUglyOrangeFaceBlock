@@ -69,16 +69,16 @@ describe("resolveDescription", () => {
 
   it("uses exact kind-specific fallback copy", () => {
     expect(resolveDescription(candidate(document.createElement("img"), "image"))).toBe(
-      "Image protected by Eclipse Goggles",
+      "Image protected by Goggles",
     );
     expect(resolveDescription(candidate(document.createElement("div"), "background-image"))).toBe(
-      "Background image protected by Eclipse Goggles",
+      "Background image protected by Goggles",
     );
     expect(resolveDescription(candidate(document.createElement("video"), "native-video"))).toBe(
-      "Video protected by Eclipse Goggles",
+      "Video protected by Goggles",
     );
     expect(resolveDescription(candidate(document.createElement("iframe"), "video-iframe"))).toBe(
-      "Embedded video protected by Eclipse Goggles",
+      "Embedded video protected by Goggles",
     );
   });
 

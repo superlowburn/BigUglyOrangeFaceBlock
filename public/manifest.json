@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Eclipse Goggles",
+  "name": "Goggles",
   "description": "Safety goggles for visual media on the web.",
   "version": "0.1.0",
   "permissions": ["storage", "activeTab", "declarativeNetRequestWithHostAccess", "webNavigation"],

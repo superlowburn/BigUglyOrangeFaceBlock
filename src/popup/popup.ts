@@ -18,7 +18,7 @@ type ModeOption = {
   description: string;
 };
 
-const TITLE = "Eclipse Goggles";
+const TITLE = "Goggles";
 const GROUP_LABEL = "Image protection for this site";
 const SAVE_ERROR = "Could not update protection. Try again.";
 const START_ERROR = "Protection settings are unavailable on this page.";
