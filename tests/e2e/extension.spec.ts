@@ -14,6 +14,10 @@ import { request as httpRequest } from "node:http";
 const extensionPath = resolve("dist");
 const fixtureOrigin = "http://127.0.0.1:4173";
 const protectedSelector = "[data-eclipse-goggles-protected]";
+const youtubeFixtureUrl = "https://www.youtube.com/embed/eclipse-test?autoplay=1";
+const vimeoFixtureUrl = "https://player.vimeo.com/video/123456789?autoplay=1";
+const youtubeChildFixtureUrl = "https://www.youtube.com/embed/child-test";
+const videoProviderUrls = [youtubeFixtureUrl, vimeoFixtureUrl] as const;
 
 type LaunchedExtension = {
   context: BrowserContext;
@@ -23,7 +27,7 @@ type LaunchedExtension = {
 };
 
 async function launchExtension(
-  options: { deviceScaleFactor?: number; fulfillProviders?: boolean } = {},
+  options: { deviceScaleFactor?: number; providerFixtureUrls?: readonly string[] } = {},
 ): Promise<LaunchedExtension> {
   const context = await chromium.launchPersistentContext("", {
     headless: false,
@@ -35,19 +39,16 @@ async function launchExtension(
     ],
   });
   const unexpectedRequests: string[] = [];
+  const providerFixtureUrls = new Set(options.providerFixtureUrls ?? []);
   context.on("request", (request) => {
     const url = request.url();
     if (isLocalRequest(url)) return;
-    if (options.fulfillProviders && isProviderFixtureRequest(url)) return;
+    if (providerFixtureUrls.has(url)) return;
     unexpectedRequests.push(`${request.method()} ${request.resourceType()} ${url}`);
   });
-  if (options.fulfillProviders) {
-    await context.route("https://www.youtube.com/**", (route) => route.fulfill({
-      body: "<!doctype html><html><body><h1>YouTube provider fixture</h1></body></html>",
-      contentType: "text/html",
-    }));
-    await context.route("https://player.vimeo.com/**", (route) => route.fulfill({
-      body: "<!doctype html><html><body><h1>Vimeo provider fixture</h1></body></html>",
+  for (const url of providerFixtureUrls) {
+    await context.route(url, (route) => route.fulfill({
+      body: "<!doctype html><html><body><h1>Local provider fixture</h1></body></html>",
       contentType: "text/html",
     }));
   }
@@ -62,11 +63,6 @@ function isLocalRequest(url: string): boolean {
     url.startsWith("blob:") ||
     url.startsWith("about:") ||
     url.startsWith("chrome-extension:");
-}
-
-function isProviderFixtureRequest(url: string): boolean {
-  return /^https:\/\/www\.youtube\.com\/embed\/[^/]+/.test(url) ||
-    /^https:\/\/player\.vimeo\.com\/video\/[^/]+/.test(url);
 }
 
 async function closeExtension(extension: LaunchedExtension): Promise<void> {
@@ -121,6 +117,21 @@ test("fixture server is loopback-only and rejects traversal outside fixtures", a
   expect(await rawRequest("/%2e%2e/package.json")).toBe(400);
   expect(await rawRequest("/package.json")).toBe(404);
   expect(await rawRequest("/")).toBe(200);
+});
+
+test("privacy enforcement rejects an unapproved provider-format URL", async () => {
+  const extension = await launchExtension({ providerFixtureUrls: videoProviderUrls });
+  const unexpectedUrl = "https://www.youtube.com/embed/unapproved-fixture";
+  await extension.context.route(unexpectedUrl, (route) => route.fulfill({
+    body: "<!doctype html><title>Rejected local provider fixture</title>",
+    contentType: "text/html",
+  }));
+  await extension.page.goto(`${fixtureOrigin}/video.html`);
+  await expect(extension.page.locator("#youtube")).toHaveAttribute("src", "about:blank");
+  await expect(extension.page.locator("#vimeo")).toHaveAttribute("src", "about:blank");
+  await extension.page.evaluate((url) => fetch(url).catch(() => undefined), unexpectedUrl);
+
+  await expect(closeExtension(extension)).rejects.toThrow(/unapproved-fixture/);
 });
 
 test("protects article images", async () => {
@@ -193,7 +204,7 @@ test("Strict mode re-protects a revealed image after two seconds fully away", as
 });
 
 test("secures native autoplay video and reveal never starts or unmutes it", async () => {
-  const extension = await launchExtension({ fulfillProviders: true });
+  const extension = await launchExtension({ providerFixtureUrls: videoProviderUrls });
   const { page } = extension;
   try {
     await page.goto(`${fixtureOrigin}/video.html`);
@@ -227,7 +238,7 @@ test("secures native autoplay video and reveal never starts or unmutes it", asyn
 });
 
 test("gates and exactly restores YouTube and Vimeo frames without real external traffic", async () => {
-  const extension = await launchExtension({ fulfillProviders: true });
+  const extension = await launchExtension({ providerFixtureUrls: videoProviderUrls });
   const { page } = extension;
   try {
     await page.goto(`${fixtureOrigin}/video.html`);
@@ -248,7 +259,9 @@ test("gates and exactly restores YouTube and Vimeo frames without real external 
 });
 
 test("protects native video in a same-origin child and does not double-protect provider child documents", async () => {
-  const extension = await launchExtension({ fulfillProviders: true });
+  const extension = await launchExtension({
+    providerFixtureUrls: [...videoProviderUrls, youtubeChildFixtureUrl],
+  });
   const { page } = extension;
   try {
     await page.goto(`${fixtureOrigin}/frame-host.html`);
