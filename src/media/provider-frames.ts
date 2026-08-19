@@ -11,7 +11,7 @@ export function isSupportedVideoFrame(element: Element): element is HTMLIFrameEl
   if (!source) return false;
 
   try {
-    const url = new URL(source, document.baseURI);
+    const url = new URL(element.src, document.baseURI);
     return (
       url.protocol === "https:" &&
       supportedProviders.some(
@@ -20,5 +20,40 @@ export function isSupportedVideoFrame(element: Element): element is HTMLIFrameEl
     );
   } catch {
     return false;
+  }
+}
+
+interface ProviderFrameState {
+  originalSource: string;
+}
+
+export class ProviderFrameController {
+  private readonly states = new WeakMap<HTMLIFrameElement, ProviderFrameState>();
+
+  gate(frame: HTMLIFrameElement): void {
+    if (this.states.has(frame) || !isSupportedVideoFrame(frame)) return;
+
+    const originalSource = frame.getAttribute("src");
+    if (!originalSource) return;
+
+    this.states.set(frame, { originalSource });
+    frame.setAttribute("src", "about:blank");
+  }
+
+  release(frame: HTMLIFrameElement): void {
+    const state = this.states.get(frame);
+    if (state) frame.setAttribute("src", state.originalSource);
+  }
+
+  regate(frame: HTMLIFrameElement): void {
+    if (this.states.has(frame)) frame.setAttribute("src", "about:blank");
+  }
+
+  restore(frame: HTMLIFrameElement): void {
+    const state = this.states.get(frame);
+    if (!state) return;
+
+    frame.setAttribute("src", state.originalSource);
+    this.states.delete(frame);
   }
 }
