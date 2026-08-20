@@ -195,6 +195,7 @@ export class ProtectionRenderer {
     layer.append(gogglesControl);
     shadow.append(layer);
     this.document.documentElement.append(host);
+    showInTopLayer(host);
 
     this.siteControl = { host, layer, goggles, menu };
     goggles.addEventListener("click", (event) => {
@@ -230,12 +231,14 @@ export class ProtectionRenderer {
     ) ?? target.closest("picture") ?? target;
     anchor.parentNode?.insertBefore(host, anchor.nextSibling);
     if (!host.isConnected) this.document.documentElement.append(host);
+    showInTopLayer(host);
     return { host, shadow };
   }
 
   private createIsolatedHost(): { host: HTMLElement; shadow: ShadowRoot } {
     const host = this.document.createElement("div");
     host.setAttribute("data-eclipse-goggles-root", "");
+    host.setAttribute("popover", "manual");
     Object.assign(host.style, {
       position: "fixed",
       inset: "0",
@@ -302,7 +305,10 @@ export class ProtectionRenderer {
     );
     revealSurface.addEventListener("click", (event) => {
       const linkedMedia = record.candidate.element.closest<HTMLElement>("a[href], [role=link]");
-      if (this.activate(record, event, "reveal")) linkedMedia?.click();
+      const redditContent = redditContentHref(record.candidate.element);
+      if (!this.activate(record, event, "reveal")) return;
+      if (redditContent) this.window.location.assign(redditContent);
+      else linkedMedia?.click();
     });
 
     const children: HTMLElement[] = [revealSurface];
@@ -645,4 +651,44 @@ function markProtected(candidate: MediaCandidate): void {
     "data-eclipse-goggles-protected",
     mediaLabel(candidate.kind),
   );
+}
+
+function redditContentHref(element: HTMLElement): string | null {
+  const post = composedClosest(
+    element,
+    'shreddit-post[post-type="link"][content-href]',
+  );
+  const href = post?.getAttribute("content-href");
+  if (!href) return null;
+
+  try {
+    const url = new URL(href, element.ownerDocument.baseURI);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function composedClosest(element: Element, selector: string): HTMLElement | null {
+  let current: Element | null = element;
+  while (current) {
+    const match = current.closest<HTMLElement>(selector);
+    if (match) return match;
+    const root = current.getRootNode();
+    if (!(root instanceof ShadowRoot)) return null;
+    current = root.host;
+  }
+  return null;
+}
+
+function showInTopLayer(host: HTMLElement): void {
+  if (typeof host.showPopover !== "function") {
+    host.removeAttribute("popover");
+    return;
+  }
+  try {
+    host.showPopover();
+  } catch {
+    host.removeAttribute("popover");
+  }
 }

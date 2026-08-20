@@ -8,9 +8,12 @@ const interactiveDescendant =
   "button, a, input, select, textarea, [role=button], [tabindex]";
 
 export interface ClassificationEnvironment {
-  box(element: Element): Pick<DOMRect, "width" | "height">;
+  box(element: Element): ClassificationBox;
   style(element: Element): CSSStyleDeclaration;
 }
+
+type ClassificationBox = Pick<DOMRect, "width" | "height"> &
+  Partial<Pick<DOMRect, "top" | "right" | "bottom" | "left">>;
 
 export function classifyElement(
   element: Element,
@@ -43,6 +46,7 @@ export function classifyElement(
     if (!hasBothDimensions(width, height, imageMinimum)) return null;
 
     const alt = element.getAttribute("alt")?.trim() ?? "";
+    if (!alt && hasMeaningfulOverlappingCopy(element, env)) return null;
     if (alt || hasBothDimensions(width, height, undecoratedImageMinimum)) {
       return { element, kind: "image" };
     }
@@ -59,6 +63,58 @@ export function classifyElement(
   }
 
   return null;
+}
+
+function hasMeaningfulOverlappingCopy(
+  element: HTMLImageElement,
+  env: ClassificationEnvironment,
+): boolean {
+  const source = element.currentSrc || element.src;
+  const parent = element.parentElement;
+  if (!source || !parent) return false;
+
+  const box = env.box(element);
+  for (const sibling of parent.children) {
+    if (
+      sibling === element ||
+      !(sibling instanceof HTMLImageElement) ||
+      !sibling.getAttribute("alt")?.trim() ||
+      (sibling.currentSrc || sibling.src) !== source
+    ) {
+      continue;
+    }
+
+    if (substantiallyOverlaps(box, env.box(sibling))) return true;
+  }
+  return false;
+}
+
+function substantiallyOverlaps(first: ClassificationBox, second: ClassificationBox): boolean {
+  if (
+    first.left === undefined ||
+    first.top === undefined ||
+    first.right === undefined ||
+    first.bottom === undefined ||
+    second.left === undefined ||
+    second.top === undefined ||
+    second.right === undefined ||
+    second.bottom === undefined
+  ) {
+    return false;
+  }
+
+  const intersectionWidth = Math.max(
+    0,
+    Math.min(first.right, second.right) - Math.max(first.left, second.left),
+  );
+  const intersectionHeight = Math.max(
+    0,
+    Math.min(first.bottom, second.bottom) - Math.max(first.top, second.top),
+  );
+  const smallerArea = Math.min(first.width * first.height, second.width * second.height);
+  const largerArea = Math.max(first.width * first.height, second.width * second.height);
+  if (smallerArea <= 0 || smallerArea / largerArea < 0.5) return false;
+  return (intersectionWidth * intersectionHeight) / smallerArea >= 0.8;
 }
 
 function hasRenderedText(element: HTMLElement, env: ClassificationEnvironment): boolean {

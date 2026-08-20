@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Hostile stacking context fixture</title>
+    <style>
+      body { margin: 16px; }
+      .media-shell { position: relative; z-index: -1; transform: translateZ(0); }
+      img { display: block; width: 395px; height: 220px; }
+      #interceptor { position: fixed; top: 24px; right: 24px; z-index: 100; width: 36px; height: 36px; }
+    </style>
+  </head>
+  <body>
+    <div class="media-shell">
+      <img alt="A photo inside a hostile stacking context" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='790' height='440'%3E%3Crect width='790' height='440' fill='%2386a4b8'/%3E%3C/svg%3E">
+    </div>
+    <button id="interceptor" type="button">Page control</button>
+    <script>
+      window.interceptorClicks = 0;
+      document.querySelector("#interceptor").addEventListener("click", () => window.interceptorClicks += 1);
+    </script>
+  </body>
+</html>

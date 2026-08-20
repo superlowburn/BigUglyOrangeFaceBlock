@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Reddit shadow card fixture</title>
+  </head>
+  <body>
+    <shreddit-post post-type="link" content-href="/shadow-video.html">
+      <reddit-card></reddit-card>
+    </shreddit-post>
+    <script>
+      customElements.define("reddit-card", class extends HTMLElement {
+        constructor() {
+          super();
+          const root = this.attachShadow({ mode: "open" });
+          root.innerHTML = `<style>
+            .thumbnail {
+              width: 320px;
+              height: 200px;
+              background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='200'%3E%3Crect width='320' height='200' fill='%237894a8'/%3E%3C/svg%3E");
+              background-size: cover;
+            }
+          </style><div class="thumbnail"></div>`;
+        }
+      });
+    </script>
+  </body>
+</html>
