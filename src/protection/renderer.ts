@@ -205,6 +205,7 @@ export class ProtectionRenderer {
       menu.hidden = !open;
       goggles.setAttribute("aria-expanded", String(open));
       layer.classList.toggle("eg-menu-open", open);
+      if (open) this.placeMenu(layer, goggles, menu);
     });
     gogglesControl.addEventListener("mouseleave", () => this.closeSiteMenu());
     layer.addEventListener("keydown", (event) => {
@@ -248,13 +249,14 @@ export class ProtectionRenderer {
     return { host, shadow };
   }
 
-  private activate(record: ProtectionRecord, event: Event, action: "reveal" | "reveal-all" | "reprotect"): void {
-    if (!this.trustedActivation(event) || record.removed) return;
+  private activate(record: ProtectionRecord, event: Event, action: "reveal" | "reveal-all" | "reprotect"): boolean {
+    if (!this.trustedActivation(event) || record.removed) return false;
     event.preventDefault();
     event.stopPropagation();
     if (action === "reprotect") record.handle.reprotect();
     else if (action === "reveal-all") record.onRevealAll();
     else record.handle.reveal();
+    return true;
   }
 
   private reveal(record: ProtectionRecord): void {
@@ -289,7 +291,8 @@ export class ProtectionRenderer {
     const { layer, description } = record;
     layer.className = "eg-layer eg-frost";
     layer.removeAttribute("aria-label");
-    const compact = this.isCompact(record, box);
+    const presentation = presentationFor(box ?? record.candidate.element.getBoundingClientRect());
+    const compact = presentation.compact;
     layer.classList.toggle("eg-compact", compact);
 
     const revealSurface = this.createButton(
@@ -297,11 +300,15 @@ export class ProtectionRenderer {
       "eg-reveal-surface",
       `Reveal protected media: ${description}`,
     );
-    revealSurface.addEventListener("click", (event) => this.activate(record, event, "reveal"));
+    revealSurface.addEventListener("click", (event) => {
+      const linkedMedia = record.candidate.element.closest<HTMLElement>("a[href], [role=link]");
+      if (this.activate(record, event, "reveal")) linkedMedia?.click();
+    });
 
     const children: HTMLElement[] = [revealSurface];
     const infoControl = this.document.createElement("div");
     infoControl.className = "eg-info-control";
+    infoControl.hidden = !presentation.showInfo;
     const info = this.createButton("i", "eg-info-button", "Show image description");
     info.setAttribute("aria-expanded", "false");
     info.setAttribute("aria-controls", "eg-info-panel");
@@ -386,6 +393,7 @@ export class ProtectionRenderer {
       menu.hidden = !open;
       goggles.setAttribute("aria-expanded", String(open));
       layer.classList.toggle("eg-menu-open", open);
+      if (open) this.placeMenu(layer, goggles, menu);
     });
     gogglesControl.addEventListener("mouseleave", () => this.closeMenu(record));
     layer.addEventListener("keydown", (event) => {
@@ -415,10 +423,10 @@ export class ProtectionRenderer {
   ): HTMLButtonElement {
     const button = this.createButton("", className, label);
     const svg = this.document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("viewBox", icon === "goggles" ? "0 0 28 20" : "0 0 24 24");
     svg.setAttribute("aria-hidden", "true");
     svg.innerHTML = icon === "goggles"
-      ? '<path d="m2.5 9 2-3h5L11 9v6l-1.5 3h-5l-2-3V9Zm10.5 0 1.5-3h5l2 3v6l-2 3h-5L13 15V9Z"/><circle cx="6.75" cy="12" r="2.75"/><circle cx="17.25" cy="12" r="2.75"/><path d="M11 10.5c.7-.8 1.3-.8 2 0M2.5 10 1 9m21 1 1-1"/>'
+      ? '<path d="M2 6 5 2h7l1.5 4v8L11 18H5l-3-4V6Zm24 0-3-4h-7l-1.5 4v8l2.5 4h6l3-4V6Z"/><circle cx="8" cy="10" r="4"/><circle cx="20" cy="10" r="4"/><path d="M12 8.5c1.3-1 2.7-1 4 0M2 8 .5 7m25.5 1 1.5-1"/>'
       : '<path d="M7 7H3V3M3.5 7A8 8 0 1 1 5 16"/>';
     button.append(svg);
     return button;
@@ -430,6 +438,28 @@ export class ProtectionRenderer {
     if (menu) menu.hidden = true;
     goggles?.setAttribute("aria-expanded", "false");
     record.layer.classList.remove("eg-menu-open");
+  }
+
+  private placeMenu(layer: HTMLElement, trigger: HTMLElement, menu: HTMLElement): void {
+    const margin = 8;
+    const layerBox = layer.getBoundingClientRect();
+    const containingBox = menu.parentElement?.getBoundingClientRect() ?? layerBox;
+    const triggerBox = trigger.getBoundingClientRect();
+    const menuBox = menu.getBoundingClientRect();
+    const menuWidth = menuBox.width || 204;
+    const menuHeight = menuBox.height;
+    const maxLeft = Math.max(margin, this.window.innerWidth - menuWidth - margin);
+    const viewportLeft = Math.min(maxLeft, Math.max(margin, triggerBox.right - menuWidth));
+    const maxTop = Math.max(margin, this.window.innerHeight - menuHeight - margin);
+    const preferredTop = triggerBox.bottom + menuHeight <= this.window.innerHeight - margin
+      ? triggerBox.bottom
+      : triggerBox.top - menuHeight;
+    const viewportTop = Math.min(maxTop, Math.max(margin, preferredTop));
+    Object.assign(menu.style, {
+      left: `${viewportLeft - containingBox.left}px`,
+      top: `${viewportTop - containingBox.top}px`,
+      right: "auto",
+    });
   }
 
   private closeSiteMenu(): void {
@@ -491,10 +521,12 @@ export class ProtectionRenderer {
     if (record.removed) return;
     const box = currentBox ?? record.candidate.element.getBoundingClientRect();
     const presentation = presentationFor(box);
-    const { compact, controlSize, inset, blur } = presentation;
+    const { compact, controlSize, inset, blur, showInfo } = presentation;
     record.layer.style.setProperty("--eg-control-size", `${controlSize}px`);
     record.layer.style.setProperty("--eg-control-inset", `${inset}px`);
     record.layer.style.setProperty("--eg-frost-blur", `${blur}px`);
+    const infoControl = record.layer.querySelector<HTMLElement>(".eg-info-control");
+    if (infoControl) infoControl.hidden = !showInfo;
     if (record.revealed) {
       const width = Math.min(controlSize, box.width);
       const height = Math.min(controlSize, box.height);
@@ -522,6 +554,9 @@ export class ProtectionRenderer {
     record.layer.style.setProperty("--eg-caption-left", `${Math.max(inset, inset - box.left)}px`);
     record.layer.style.setProperty("--eg-caption-bottom", `${Math.max(inset, box.bottom - this.window.innerHeight + inset)}px`);
     record.layer.classList.toggle("eg-compact", compact);
+    const menu = record.layer.querySelector<HTMLElement>(".eg-menu:not([hidden])");
+    const goggles = record.layer.querySelector<HTMLElement>(".eg-goggles");
+    if (menu && goggles) this.placeMenu(record.layer, goggles, menu);
   }
 
   private scheduleRecordUpdate(record: ProtectionRecord): void {
@@ -592,15 +627,17 @@ function presentationFor(box: Pick<DOMRect, "width" | "height">): {
   controlSize: number;
   inset: number;
   blur: number;
+  showInfo: boolean;
 } {
   const shortEdge = Math.min(box.width, box.height);
+  const showInfo = box.width >= 520 && box.height >= 320;
   if (box.width < 280 || box.height < 180) {
-    return { compact: true, controlSize: 30, inset: 6, blur: 12 };
+    return { compact: true, controlSize: 30, inset: 6, blur: 12, showInfo };
   }
   if (shortEdge < 360) {
-    return { compact: false, controlSize: 36, inset: 8, blur: 18 };
+    return { compact: false, controlSize: 36, inset: 8, blur: 18, showInfo };
   }
-  return { compact: false, controlSize: 44, inset: 12, blur: 25 };
+  return { compact: false, controlSize: 44, inset: 12, blur: 25, showInfo };
 }
 
 function markProtected(candidate: MediaCandidate): void {

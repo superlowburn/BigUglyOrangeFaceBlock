@@ -50,6 +50,10 @@ export const protectionStyles = `
   pointer-events: none;
 }
 
+.eg-info-control[hidden] {
+  display: none;
+}
+
 .eg-info-button {
   appearance: none;
   display: grid;
@@ -158,6 +162,7 @@ export const protectionStyles = `
 }
 
 .eg-goggles {
+  padding: 0;
   border-radius: 9px;
 }
 
@@ -172,8 +177,7 @@ export const protectionStyles = `
 
 .eg-goggles svg,
 .eg-reprotect svg {
-  width: 28px;
-  height: 28px;
+  display: block;
   overflow: visible;
   fill: none;
   stroke: currentColor;
@@ -183,7 +187,13 @@ export const protectionStyles = `
 }
 
 .eg-goggles svg {
-  transform: scale(1.04);
+  width: 28px;
+  height: 20px;
+}
+
+.eg-reprotect svg {
+  width: 28px;
+  height: 28px;
 }
 
 .eg-menu {
@@ -260,6 +270,10 @@ export const protectionStyles = `
 .eg-compact .eg-reprotect svg {
   width: 22px;
   height: 22px;
+}
+
+.eg-compact .eg-goggles svg {
+  height: 16px;
 }
 
 .eg-compact .eg-info-control {

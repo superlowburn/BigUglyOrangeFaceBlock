@@ -229,7 +229,7 @@ test("loads the project root as an unpacked extension after building", async () 
   }
 });
 
-test("scales thumbnail controls, frost, and description without losing alignment", async () => {
+test("scales thumbnail controls and keeps small-media descriptions out of the way", async () => {
   const extension = await launchExtension();
   const { page } = extension;
   try {
@@ -241,7 +241,7 @@ test("scales thumbnail controls, frost, and description without losing alignment
     await expect(layer).toHaveClass(/eg-compact/u);
     await expect(layer.locator(".eg-caption")).toHaveCount(0);
     const info = layer.locator(".eg-info-button");
-    await expect(info).toHaveText("i");
+    await expect(info).toBeHidden();
 
     await expect.poll(() => layer.evaluate((node) => {
       const goggles = node.querySelector(".eg-goggles")!;
@@ -251,6 +251,21 @@ test("scales thumbnail controls, frost, and description without losing alignment
       };
     })).toEqual({ blur: "blur(12px)", control: 30 });
 
+    await target.evaluate((node) => {
+      Object.assign((node as HTMLElement).style, { width: "320px", height: "240px" });
+    });
+    await expect(layer).not.toHaveClass(/eg-compact/u);
+    await expect.poll(() => layer.evaluate((node) => ({
+      blur: getComputedStyle(node).backdropFilter,
+      control: Math.round(node.querySelector(".eg-goggles")!.getBoundingClientRect().width),
+    }))).toEqual({ blur: "blur(18px)", control: 36 });
+    await expect(info).toBeHidden();
+    await assertAligned(target, layer);
+
+    await target.evaluate((node) => {
+      Object.assign((node as HTMLElement).style, { width: "640px", height: "360px" });
+    });
+    await expect(info).toBeVisible();
     await info.hover();
     await expect(layer.locator(".eg-info-preview")).toBeVisible();
     await expect(layer.locator(".eg-info-preview")).toHaveText(/…$/u);
@@ -262,17 +277,43 @@ test("scales thumbnail controls, frost, and description without losing alignment
 
     await page.reload();
     await expect(target).toHaveAttribute("data-eclipse-goggles-protected", "image");
-    await expect(layer.locator(".eg-info-panel")).toBeVisible();
-
+    await expect(layer.locator(".eg-info-button")).toBeHidden();
     await target.evaluate((node) => {
-      Object.assign((node as HTMLElement).style, { width: "320px", height: "240px" });
+      Object.assign((node as HTMLElement).style, { width: "640px", height: "360px" });
     });
-    await expect(layer).not.toHaveClass(/eg-compact/u);
-    await expect.poll(() => layer.evaluate((node) => ({
-      blur: getComputedStyle(node).backdropFilter,
-      control: Math.round(node.querySelector(".eg-goggles")!.getBoundingClientRect().width),
-    }))).toEqual({ blur: "blur(18px)", control: 36 });
+    await expect(layer.locator(".eg-info-panel")).toBeVisible();
+  } finally {
+    await closeExtension(extension);
+  }
+});
+
+test("keeps the goggles menu readable at the viewport edge", async () => {
+  const extension = await launchExtension();
+  const { page } = extension;
+  try {
+    await page.goto(`${fixtureOrigin}/responsive-media.html`);
+    const target = page.locator("#target");
+    const layer = layers(page).first();
+    await target.evaluate((node) => {
+      Object.assign((node as HTMLElement).style, {
+        position: "fixed",
+        left: "-185px",
+        top: "20px",
+      });
+    });
     await assertAligned(target, layer);
+    await layer.getByRole("button", { name: "Goggles reveal options" }).click();
+    const menu = layer.locator(".eg-menu");
+    await expect(menu).toBeVisible();
+
+    const menuBox = await menu.boundingBox();
+    const viewport = page.viewportSize();
+    expect(menuBox).not.toBeNull();
+    expect(viewport).not.toBeNull();
+    expect(menuBox!.x).toBeGreaterThanOrEqual(8);
+    expect(menuBox!.y).toBeGreaterThanOrEqual(8);
+    expect(menuBox!.x + menuBox!.width).toBeLessThanOrEqual(viewport!.width - 8);
+    expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(viewport!.height - 8);
   } finally {
     await closeExtension(extension);
   }
@@ -344,7 +385,7 @@ test("protects article images", async () => {
   }
 });
 
-test("keeps reveal controls outside linked images and button-wrapped pictures", async () => {
+test("follows linked media on reveal while keeping button-wrapped pictures contained", async () => {
   const extension = await launchExtension();
   const { page } = extension;
   try {
@@ -371,7 +412,8 @@ test("keeps reveal controls outside linked images and button-wrapped pictures", 
       picture.append(pictureImage);
       pictureButton.append(picture);
       (window as typeof window & { ancestorActivations: number }).ancestorActivations = 0;
-      link.addEventListener("click", () => {
+      link.addEventListener("click", (event) => {
+        event.preventDefault();
         (window as typeof window & { ancestorActivations: number }).ancestorActivations += 1;
       });
       pictureButton.addEventListener("click", () => {
@@ -407,7 +449,7 @@ test("keeps reveal controls outside linked images and button-wrapped pictures", 
     await revealThisWithText(page, "A button wrapped picture").click();
     expect(await page.evaluate(() =>
       (window as typeof window & { ancestorActivations: number }).ancestorActivations
-    )).toBe(0);
+    )).toBe(1);
     expect(page.url()).toBe(`${fixtureOrigin}/article.html`);
   } finally {
     await closeExtension(extension);

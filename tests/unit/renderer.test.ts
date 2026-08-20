@@ -225,7 +225,18 @@ describe("ProtectionRenderer", () => {
     expect(layer?.style.getPropertyValue("--eg-control-inset")).toBe("6px");
     expect(layer?.style.getPropertyValue("--eg-frost-blur")).toBe("12px");
     expect(layer?.querySelector(".eg-caption")).toBeNull();
-    expect(layer?.querySelector(".eg-info-button")?.textContent).toBe("i");
+    expect(layer?.querySelector(".eg-info-control")?.hasAttribute("hidden")).toBe(true);
+  });
+
+  it("hides image descriptions on short background-image cards", () => {
+    const card = document.createElement("div");
+    vi.spyOn(card, "getBoundingClientRect").mockReturnValue(rect(0, 0, 488, 275));
+    document.body.append(card);
+    const renderer = new ProtectionRenderer();
+
+    protect(renderer, card, { kind: "background-image" });
+
+    expect(renderer.debugLayerFor(card)?.querySelector(".eg-info-control")?.hasAttribute("hidden")).toBe(true);
   });
 
   it.each([
@@ -334,7 +345,7 @@ describe("ProtectionRenderer", () => {
     expect(uncancelled).toBe(false);
   });
 
-  it("places a linked image control after the link and contains its activation", () => {
+  it("reveals linked media and follows its link with the same click", () => {
     const link = document.createElement("a");
     link.href = "/destination";
     const image = document.createElement("img");
@@ -344,7 +355,10 @@ describe("ProtectionRenderer", () => {
     vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(0, 0, 640, 360));
     const linkActivation = vi.fn();
     const documentActivation = vi.fn();
-    link.addEventListener("click", linkActivation);
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      linkActivation();
+    });
     document.addEventListener("click", documentActivation, { once: true });
     const onReveal = vi.fn();
     const renderer = new ProtectionRenderer({
@@ -360,9 +374,32 @@ describe("ProtectionRenderer", () => {
     expect(host?.nextElementSibling).toBe(after);
     expect(link.contains(host)).toBe(false);
     expect(uncancelled).toBe(false);
-    expect(linkActivation).not.toHaveBeenCalled();
-    expect(documentActivation).not.toHaveBeenCalled();
+    expect(linkActivation).toHaveBeenCalledTimes(1);
+    expect(documentActivation).toHaveBeenCalledTimes(1);
     expect(onReveal).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps an opened media menu inside the visible viewport", () => {
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(427);
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(240);
+    const image = document.createElement("img");
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(-300, 20, 640, 360));
+    document.body.append(image);
+    const renderer = new ProtectionRenderer();
+    protect(renderer, image);
+    const layer = renderer.debugLayerFor(image)!;
+    const control = layer.querySelector<HTMLElement>(".eg-goggles-control")!;
+    const goggles = layer.querySelector<HTMLButtonElement>(".eg-goggles")!;
+    const menu = layer.querySelector<HTMLElement>(".eg-menu")!;
+    vi.spyOn(layer, "getBoundingClientRect").mockReturnValue(rect(-300, 20, 640, 360));
+    vi.spyOn(control, "getBoundingClientRect").mockReturnValue(rect(6, 30, 30, 30));
+    vi.spyOn(goggles, "getBoundingClientRect").mockReturnValue(rect(6, 30, 30, 30));
+    vi.spyOn(menu, "getBoundingClientRect").mockReturnValue(rect(0, 0, 204, 176));
+
+    goggles.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    expect(Number.parseFloat(menu.style.left) + control.getBoundingClientRect().left).toBe(8);
+    expect(Number.parseFloat(menu.style.top) + control.getBoundingClientRect().top).toBe(8);
   });
 
   it("places a picture control after its nearest interactive button ancestor", () => {
@@ -619,7 +656,7 @@ describe("ProtectionRenderer", () => {
 
     const layer = renderer.debugLayerFor(image);
     expect(layer?.querySelector(".eg-caption")).toBeNull();
-    expect(layer?.querySelector(".eg-info-button")?.textContent).toBe("i");
+    expect(layer?.querySelector(".eg-info-control")?.hasAttribute("hidden")).toBe(true);
     expect(layer?.querySelector(".eg-reveal-surface")?.getAttribute("aria-label")).toContain("A black audio component");
     expect(layer?.querySelector(".eg-goggles")).not.toBeNull();
     expect(renderer.debugLayerFor(image)?.classList.contains("eg-compact")).toBe(true);
@@ -639,7 +676,7 @@ describe("ProtectionRenderer", () => {
 
     const layer = renderer.debugLayerFor(image);
     expect(layer?.querySelector(".eg-caption")).toBeNull();
-    expect(layer?.querySelector(".eg-info-button")?.textContent).toBe("i");
+    expect(layer?.querySelector(".eg-info-control")?.hasAttribute("hidden")).toBe(true);
     expect(layer?.querySelector(".eg-reveal-surface")?.getAttribute("aria-label")).toContain("A black audio component");
     expect(layer?.querySelector(".eg-goggles")).not.toBeNull();
   });
