@@ -248,31 +248,37 @@ describe("ContentController", () => {
     expect(setSiteMode).toHaveBeenCalledWith("https://news.example", "trusted");
   });
 
-  it("toggles descriptions for current media and applies the page choice to future media", () => {
+  it("persists the site description choice and applies it to current and future media", () => {
     const first = document.createElement("img");
     const second = document.createElement("img");
     document.body.append(first, second);
+    const setDescriptionsVisible = vi.fn();
     const harness = controllerHarness(new Map([
       [first, candidate(first, "image")],
       [second, candidate(second, "image")],
-    ]));
-    harness.controller.start({ origin: "https://news.example", mode: "protected" });
+    ]), { setDescriptionsVisible } as Partial<ContentControllerDependencies>);
+    harness.controller.start({
+      origin: "https://news.example",
+      mode: "protected",
+      descriptionsVisible: false,
+    });
     harness.observer.emit([first]);
 
     const firstOptions = harness.renderer.items[0]?.options as ProtectionOptions & {
       onToggleDescriptions?: () => void;
       descriptionsVisible?: boolean;
     };
-    expect(firstOptions.descriptionsVisible).toBe(true);
+    expect(firstOptions.descriptionsVisible).toBe(false);
     expect(typeof firstOptions.onToggleDescriptions).toBe("function");
     firstOptions.onToggleDescriptions?.();
-    expect(harness.renderer.items[0]?.handle.setDescriptionVisible).toHaveBeenCalledWith(false);
+    expect(setDescriptionsVisible).toHaveBeenCalledWith("https://news.example", true);
+    expect(harness.renderer.items[0]?.handle.setDescriptionVisible).toHaveBeenCalledWith(true);
 
     harness.observer.emit([second]);
     const secondOptions = harness.renderer.items[1]?.options as ProtectionOptions & {
       descriptionsVisible?: boolean;
     };
-    expect(secondOptions.descriptionsVisible).toBe(false);
+    expect(secondOptions.descriptionsVisible).toBe(true);
   });
 
   it("keeps one site control in Trusted mode and restores Protected on request", () => {
@@ -596,6 +602,7 @@ function bootstrapHarness(
     mode: "strict" satisfies SiteMode,
   });
   const watchPolicy = vi.fn(() => vi.fn());
+  const getDescriptionsVisible = vi.fn().mockResolvedValue(false);
   const addPageHideListener = vi.fn();
   const dependencies: ContentBootstrapDependencies = {
     href: "https://child.example/story",
@@ -603,6 +610,7 @@ function bootstrapHarness(
     parentLocation: () => null,
     createController: () => controller,
     sendMessage,
+    getDescriptionsVisible,
     watchPolicy,
     addPageHideListener,
     ...overrides,
@@ -650,6 +658,7 @@ describe("content-script bootstrap", () => {
     expect(harness.controller.start).toHaveBeenCalledWith({
       origin: "https://top.example",
       mode: "strict",
+      descriptionsVisible: false,
     });
     expect(harness.watchPolicy).toHaveBeenCalledWith(
       "https://top.example",
@@ -660,6 +669,38 @@ describe("content-script bootstrap", () => {
       | undefined;
     listener?.("trusted");
     expect(harness.controller.applyMode).toHaveBeenCalledWith("trusted");
+  });
+
+  it("starts with the permanent description choice for the top origin", async () => {
+    const getDescriptionsVisible = vi.fn().mockResolvedValue(true);
+    const harness = bootstrapHarness({ getDescriptionsVisible });
+
+    await bootstrapContentScript(harness.dependencies);
+
+    expect(getDescriptionsVisible).toHaveBeenCalledWith("https://top.example");
+    expect(harness.controller.start).toHaveBeenCalledWith({
+      origin: "https://top.example",
+      mode: "strict",
+      descriptionsVisible: true,
+    });
+  });
+
+  it("keeps the site policy when the optional description preference cannot load", async () => {
+    const harness = bootstrapHarness({
+      getDescriptionsVisible: vi.fn().mockRejectedValue(new Error("storage unavailable")),
+    });
+
+    await bootstrapContentScript(harness.dependencies);
+
+    expect(harness.controller.start).toHaveBeenCalledWith({
+      origin: "https://top.example",
+      mode: "strict",
+      descriptionsVisible: false,
+    });
+    expect(harness.watchPolicy).toHaveBeenCalledWith(
+      "https://top.example",
+      expect.any(Function),
+    );
   });
 
   it.each([

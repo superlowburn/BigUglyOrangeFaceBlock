@@ -63,6 +63,7 @@ export interface ContentControllerDependencies {
   development?: boolean;
   logDiagnostic?: (tagName: string, message: string) => void;
   setSiteMode?: (origin: string, mode: SiteMode) => void | Promise<void>;
+  setDescriptionsVisible?: (origin: string, visible: boolean) => void | Promise<void>;
   openSettings?: () => void | Promise<void>;
   enableSiteControl?: boolean;
 }
@@ -84,6 +85,7 @@ export class ContentController {
   private readonly development: boolean;
   private readonly logDiagnostic: (tagName: string, message: string) => void;
   private readonly setSiteMode: (origin: string, mode: SiteMode) => void | Promise<void>;
+  private readonly setDescriptionsVisible: (origin: string, visible: boolean) => void | Promise<void>;
   private readonly openSettings: () => void | Promise<void>;
   private readonly enableSiteControl: boolean;
   private readonly byElement = new WeakMap<Element, ProtectionRecord>();
@@ -116,6 +118,7 @@ export class ContentController {
     this.logDiagnostic = dependencies.logDiagnostic ??
       ((tagName, message) => console.warn(`Goggles: ${tagName}: ${message}`));
     this.setSiteMode = dependencies.setSiteMode ?? (() => undefined);
+    this.setDescriptionsVisible = dependencies.setDescriptionsVisible ?? (() => undefined);
     this.openSettings = dependencies.openSettings ?? (() => undefined);
     this.enableSiteControl = dependencies.enableSiteControl ?? true;
   }
@@ -125,7 +128,7 @@ export class ContentController {
     this.started = true;
     this.origin = context.origin;
     this.mode = context.mode;
-    this.descriptionsVisible = true;
+    this.descriptionsVisible = context.descriptionsVisible ?? false;
     this.syncSiteControl();
     this.startObservation();
   }
@@ -294,6 +297,10 @@ export class ContentController {
 
   private toggleDescriptions(): void {
     this.descriptionsVisible = !this.descriptionsVisible;
+    if (this.origin) {
+      void Promise.resolve(this.setDescriptionsVisible(this.origin, this.descriptionsVisible))
+        .catch(() => undefined);
+    }
     for (const record of this.records) {
       record.handle.setDescriptionVisible(this.descriptionsVisible);
     }

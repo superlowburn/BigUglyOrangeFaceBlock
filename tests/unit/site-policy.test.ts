@@ -55,4 +55,34 @@ describe("SitePolicyStore", () => {
 
     expect(area.set).toHaveBeenCalledWith({ [defaultPolicyKey]: "strict" });
   });
+
+  it("defaults site descriptions to hidden and restores a saved preference", async () => {
+    const area = {
+      get: vi.fn()
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ "site-descriptions:https://example.com": true }),
+      set: vi.fn(),
+    };
+    const store = new SitePolicyStore(area) as SitePolicyStore & {
+      getDescriptionsVisible?: (origin: string) => Promise<boolean>;
+    };
+
+    expect(typeof store.getDescriptionsVisible).toBe("function");
+    await expect(store.getDescriptionsVisible?.("https://example.com")).resolves.toBe(false);
+    await expect(store.getDescriptionsVisible?.("https://example.com")).resolves.toBe(true);
+  });
+
+  it("stores the permanent description choice by origin", async () => {
+    const area = { get: vi.fn(), set: vi.fn().mockResolvedValue(undefined) };
+    const store = new SitePolicyStore(area) as SitePolicyStore & {
+      setDescriptionsVisible?: (origin: string, visible: boolean) => Promise<void>;
+    };
+
+    expect(typeof store.setDescriptionsVisible).toBe("function");
+    await store.setDescriptionsVisible?.("https://example.com", true);
+
+    expect(area.set).toHaveBeenCalledWith({
+      "site-descriptions:https://example.com": true,
+    });
+  });
 });

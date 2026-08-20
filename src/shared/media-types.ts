@@ -14,6 +14,7 @@ export interface MediaCandidate {
 export interface PolicyContext {
   origin: string;
   mode: SiteMode;
+  descriptionsVisible?: boolean;
 }
 
 export type ExtensionMessage =

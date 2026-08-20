@@ -23,6 +23,10 @@ export function policyKey(origin: string): string {
   return `site-policy:${origin}`;
 }
 
+export function descriptionsKey(origin: string): string {
+  return `site-descriptions:${origin}`;
+}
+
 export function isSiteMode(value: unknown): value is SiteMode {
   return value === "trusted" || value === "protected" || value === "strict";
 }
@@ -48,6 +52,15 @@ export class SitePolicyStore {
 
   async setDefault(mode: Exclude<SiteMode, "trusted">): Promise<void> {
     await this.area.set({ [defaultPolicyKey]: mode });
+  }
+
+  async getDescriptionsVisible(origin: string): Promise<boolean> {
+    const key = descriptionsKey(origin);
+    return (await this.area.get(key))[key] === true;
+  }
+
+  async setDescriptionsVisible(origin: string, visible: boolean): Promise<void> {
+    await this.area.set({ [descriptionsKey(origin)]: visible });
   }
 
   watch(origin: string, listener: (mode: SiteMode) => void): () => void {

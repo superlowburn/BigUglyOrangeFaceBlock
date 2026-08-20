@@ -40,100 +40,97 @@ export const protectionStyles = `
   cursor: pointer;
 }
 
-.eg-caption {
+.eg-info-control {
   position: absolute;
   left: var(--eg-caption-left, 12px);
   bottom: var(--eg-caption-bottom, 12px);
-  z-index: 2;
-  max-width: calc(100% - 80px);
-  display: flex;
-  align-items: stretch;
-  overflow: hidden;
-  color: #fff;
-  background: rgba(31, 33, 35, 0.76);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 7px;
-  font-size: 13px;
-  pointer-events: auto;
-  backdrop-filter: blur(8px);
+  z-index: 3;
+  width: calc(100% - var(--eg-caption-left, 12px) - var(--eg-control-right, 12px));
+  min-height: var(--eg-info-size, 28px);
+  pointer-events: none;
 }
 
-.eg-description {
-  display: -webkit-box;
-  min-width: 0;
-  max-width: 420px;
-  padding: 7px 9px;
-  overflow: hidden;
-  opacity: 1;
-  line-height: 1.35;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  transition: max-width 160ms ease, padding 160ms ease, opacity 120ms ease, transform 160ms ease;
-}
-
-.eg-description-expanded {
-  -webkit-line-clamp: unset;
-}
-
-.eg-description-more {
-  align-self: center;
-  padding: 7px 4px;
-  color: #fff;
-  border: 0;
-  background: transparent;
-  font: 600 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-.eg-description-toggle {
+.eg-info-button {
   appearance: none;
   display: grid;
-  flex: 0 0 44px;
-  width: 44px;
-  min-height: 44px;
-  padding: 10px;
+  width: var(--eg-info-size, 28px);
+  height: var(--eg-info-size, 28px);
+  padding: 0;
   place-items: center;
   color: #fff;
-  border: 0;
-  border-left: 1px solid rgba(255, 255, 255, 0.16);
-  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.52);
+  border-radius: 50%;
+  background: rgba(31, 33, 35, 0.78);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+  font: 700 17px/1 Georgia, serif;
+  pointer-events: auto;
+  backdrop-filter: blur(8px);
   cursor: pointer;
 }
 
-.eg-description-toggle:hover {
-  background: rgba(255, 255, 255, 0.11);
+.eg-info-button:hover {
+  background: rgba(31, 33, 35, 0.92);
 }
 
-.eg-description-toggle svg {
-  width: 20px;
-  height: 20px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  transition: transform 160ms ease;
+.eg-info-preview,
+.eg-info-panel {
+  position: absolute;
+  bottom: calc(var(--eg-info-size, 28px) + 6px);
+  left: 0;
+  display: none;
+  width: min(320px, 100%);
+  color: #fff;
+  background: rgba(31, 33, 35, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
 }
 
-.eg-caption-collapsed .eg-description {
-  max-width: 0;
-  padding-right: 0;
-  padding-left: 0;
-  opacity: 0;
-  transform: translateY(8px);
+.eg-info-preview {
+  padding: 7px 9px;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
-.eg-caption-collapsed .eg-description-more {
+.eg-info-control:hover:not(.eg-info-pinned) .eg-info-preview,
+.eg-info-button:focus-visible + .eg-info-preview {
+  display: block;
+}
+
+.eg-info-control.eg-info-pinned .eg-info-preview {
   display: none;
 }
 
-.eg-caption-collapsed .eg-description-toggle {
-  border-left-color: transparent;
+.eg-info-pinned .eg-info-panel {
+  display: grid;
 }
 
-.eg-caption-collapsed .eg-description-toggle svg {
-  transform: rotate(180deg);
+.eg-info-description {
+  max-height: 120px;
+  padding: 9px 10px;
+  overflow: auto;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.eg-info-always {
+  min-height: 36px;
+  padding: 8px 10px;
+  color: #e4e7e9;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0 0 7px 7px;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+  font: 600 12px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.eg-info-always:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.10);
 }
 
 .eg-goggles-control {
@@ -153,12 +150,19 @@ export const protectionStyles = `
   place-items: center;
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.26);
-  border-radius: 50%;
   background: rgba(31, 33, 35, 0.78);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.17);
   backdrop-filter: blur(8px);
   cursor: pointer;
   font: inherit;
+}
+
+.eg-goggles {
+  border-radius: 9px;
+}
+
+.eg-reprotect {
+  border-radius: 50%;
 }
 
 .eg-goggles:hover,
@@ -168,8 +172,8 @@ export const protectionStyles = `
 
 .eg-goggles svg,
 .eg-reprotect svg {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   overflow: visible;
   fill: none;
   stroke: currentColor;
@@ -179,7 +183,7 @@ export const protectionStyles = `
 }
 
 .eg-goggles svg {
-  transform: scale(1.12);
+  transform: scale(1.04);
 }
 
 .eg-menu {
@@ -254,33 +258,27 @@ export const protectionStyles = `
 
 .eg-compact .eg-goggles svg,
 .eg-compact .eg-reprotect svg {
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
 }
 
-.eg-compact .eg-caption {
-  max-width: calc(100% - var(--eg-control-size, 30px) - 18px);
+.eg-compact .eg-info-control {
+  --eg-info-size: 24px;
+}
+
+.eg-compact .eg-info-button {
+  font-size: 15px;
+}
+
+.eg-compact .eg-info-preview,
+.eg-compact .eg-info-description {
   font-size: 11px;
-}
-
-.eg-compact .eg-description {
-  max-width: 150px;
-  padding: 5px 6px;
-  -webkit-line-clamp: 2;
-}
-
-.eg-compact .eg-description-toggle {
-  flex-basis: 30px;
-  width: 30px;
-  min-height: 30px;
-  padding: 5px;
-  font: 700 9px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  letter-spacing: 0.04em;
 }
 
 .eg-reveal-surface:focus-visible,
 .eg-goggles:focus-visible,
-.eg-description-toggle:focus-visible,
+.eg-info-button:focus-visible,
+.eg-info-always:focus-visible,
 .eg-menu button:focus-visible,
 .eg-reprotect:focus-visible {
   outline: 2px solid #fff;

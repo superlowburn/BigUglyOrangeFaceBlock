@@ -75,7 +75,7 @@ function protect(
     onAllowSite: options.onAllowSite ?? vi.fn(),
     onOpenSettings: options.onOpenSettings ?? vi.fn(),
     onToggleDescriptions: options.onToggleDescriptions ?? vi.fn(),
-    descriptionsVisible: options.descriptionsVisible ?? true,
+    descriptionsVisible: options.descriptionsVisible ?? false,
     onReprotect: options.onReprotect ?? vi.fn(),
   };
   return renderer.protect(candidate(element, options.kind), protectionOptions);
@@ -143,7 +143,8 @@ describe("ProtectionRenderer", () => {
     expect(layer?.querySelector(".eg-goggles svg")?.getAttribute("aria-hidden")).toBe("true");
   });
 
-  it("collapses and restores the description without revealing the media", () => {
+  it("uses one info button to preview and pin the full description without revealing", () => {
+    const description = "A deliberately long description of an image that continues well beyond fifty characters.";
     const image = document.createElement("img");
     vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(20, 30, 640, 360));
     document.body.append(image);
@@ -151,34 +152,39 @@ describe("ProtectionRenderer", () => {
     const renderer = new ProtectionRenderer({
       trustedActivation: (event) => event instanceof MouseEvent && event.type === "click",
     });
-    const handle = protect(renderer, image, { onReveal });
+    const handle = protect(renderer, image, { description, onReveal });
     const layer = renderer.debugLayerFor(image);
-    const caption = layer?.querySelector<HTMLElement>(".eg-caption");
-    const toggle = layer?.querySelector<HTMLButtonElement>(".eg-description-toggle");
+    const control = layer?.querySelector<HTMLElement>(".eg-info-control");
+    const info = layer?.querySelector<HTMLButtonElement>(".eg-info-button");
 
-    expect(toggle?.getAttribute("aria-expanded")).toBe("true");
-    expect(toggle?.getAttribute("aria-label")).toBe("Hide description");
-    toggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(layer?.querySelector(".eg-caption")).toBeNull();
+    expect(info?.textContent).toBe("i");
+    expect(info?.getAttribute("aria-expanded")).toBe("false");
+    expect(layer?.querySelector(".eg-info-preview")?.textContent).toBe(
+      `${Array.from(description).slice(0, 50).join("")}…`,
+    );
+    expect(layer?.querySelector(".eg-info-description")?.textContent).toBe(description);
+    expect(layer?.querySelector(".eg-info-always")?.textContent).toBe(
+      "Always show descriptions on this site",
+    );
 
-    expect(caption?.classList.contains("eg-caption-collapsed")).toBe(true);
-    expect(toggle?.getAttribute("aria-expanded")).toBe("false");
-    expect(toggle?.getAttribute("aria-label")).toBe("Show description");
+    info?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    expect(control?.classList.contains("eg-info-pinned")).toBe(true);
+    expect(info?.getAttribute("aria-expanded")).toBe("true");
     expect(handle.isRevealed()).toBe(false);
     expect(onReveal).not.toHaveBeenCalled();
-
-    toggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    expect(caption?.classList.contains("eg-caption-collapsed")).toBe(false);
-    expect(toggle?.getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("keeps description control per image without adding a page-level menu action", () => {
+  it("pins descriptions for every item when the permanent site option is activated", () => {
     const image = document.createElement("img");
     vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(20, 30, 640, 360));
     document.body.append(image);
+    const onToggleDescriptions = vi.fn();
     const renderer = new ProtectionRenderer({
       trustedActivation: (event) => event instanceof MouseEvent && event.type === "click",
     });
-    const handle = protect(renderer, image);
+    const handle = protect(renderer, image, { onToggleDescriptions });
     const pageDescriptions = renderer.debugLayerFor(image)?.querySelector(".eg-toggle-descriptions");
 
     expect(pageDescriptions).toBeNull();
@@ -187,15 +193,22 @@ describe("ProtectionRenderer", () => {
       setDescriptionVisible?: (visible: boolean) => void;
     };
     expect(typeof descriptionHandle.setDescriptionVisible).toBe("function");
-    descriptionHandle.setDescriptionVisible?.(false);
-    expect(renderer.debugLayerFor(image)?.querySelector(".eg-caption")?.classList)
-      .toContain("eg-caption-collapsed");
+    expect(renderer.debugLayerFor(image)?.querySelector(".eg-info-control")?.classList
+      .contains("eg-info-pinned")).toBe(false);
 
-    renderer.debugLayerFor(image)?.querySelector(".eg-description-toggle")?.dispatchEvent(
+    renderer.debugLayerFor(image)?.querySelector(".eg-info-button")?.dispatchEvent(
       new MouseEvent("click", { bubbles: true }),
     );
-    expect(renderer.debugLayerFor(image)?.querySelector(".eg-caption")?.classList)
-      .not.toContain("eg-caption-collapsed");
+    renderer.debugLayerFor(image)?.querySelector(".eg-info-always")?.dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
+    expect(onToggleDescriptions).toHaveBeenCalledTimes(1);
+
+    descriptionHandle.setDescriptionVisible?.(true);
+    expect(renderer.debugLayerFor(image)?.querySelector(".eg-info-control")?.classList)
+      .toContain("eg-info-pinned");
+    expect(renderer.debugLayerFor(image)?.querySelector(".eg-info-always")?.textContent)
+      .toBe("Stop always showing descriptions");
   });
 
   it("uses a compact thumbnail treatment at normal feed-thumbnail size", () => {
@@ -211,8 +224,8 @@ describe("ProtectionRenderer", () => {
     expect(layer?.style.getPropertyValue("--eg-control-size")).toBe("30px");
     expect(layer?.style.getPropertyValue("--eg-control-inset")).toBe("6px");
     expect(layer?.style.getPropertyValue("--eg-frost-blur")).toBe("12px");
-    expect(layer?.querySelector(".eg-caption")?.classList).toContain("eg-caption-collapsed");
-    expect(layer?.querySelector(".eg-description-toggle")?.textContent).toBe("ALT");
+    expect(layer?.querySelector(".eg-caption")).toBeNull();
+    expect(layer?.querySelector(".eg-info-button")?.textContent).toBe("i");
   });
 
   it.each([
@@ -229,26 +242,6 @@ describe("ProtectionRenderer", () => {
     const layer = renderer.debugLayerFor(image);
     expect(layer?.style.getPropertyValue("--eg-control-size")).toBe(control);
     expect(layer?.style.getPropertyValue("--eg-frost-blur")).toBe(blur);
-  });
-
-  it("shows only 50 description characters until the user expands it", () => {
-    const description = "A deliberately long description of an image that continues well beyond fifty characters.";
-    const image = document.createElement("img");
-    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(0, 0, 640, 360));
-    document.body.append(image);
-    const renderer = new ProtectionRenderer({
-      trustedActivation: (event) => event instanceof MouseEvent && event.type === "click",
-    });
-    protect(renderer, image, { description });
-    const layer = renderer.debugLayerFor(image);
-    const copy = layer?.querySelector(".eg-description");
-    const more = layer?.querySelector(".eg-description-more");
-
-    expect(copy?.textContent).toBe(`${Array.from(description).slice(0, 50).join("")}…`);
-    expect(more?.textContent).toBe("more");
-    more?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    expect(copy?.textContent).toBe(description);
-    expect(more?.textContent).toBe("less");
   });
 
   it("opens settings from the Goggles brand row", () => {
@@ -616,7 +609,7 @@ describe("ProtectionRenderer", () => {
     expect(renderer.debugLayerFor(image)?.style.height).toBe("240px");
   });
 
-  it("uses a collapsed ALT drawer and preserves the full description on its reveal surface", () => {
+  it("uses the same compact info control and preserves the full description on its reveal surface", () => {
     const image = document.createElement("img");
     vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(0, 0, 159, 89));
     document.body.append(image);
@@ -625,8 +618,8 @@ describe("ProtectionRenderer", () => {
     protect(renderer, image);
 
     const layer = renderer.debugLayerFor(image);
-    expect(layer?.querySelector(".eg-caption")?.classList).toContain("eg-caption-collapsed");
-    expect(layer?.querySelector(".eg-description-toggle")?.textContent).toBe("ALT");
+    expect(layer?.querySelector(".eg-caption")).toBeNull();
+    expect(layer?.querySelector(".eg-info-button")?.textContent).toBe("i");
     expect(layer?.querySelector(".eg-reveal-surface")?.getAttribute("aria-label")).toContain("A black audio component");
     expect(layer?.querySelector(".eg-goggles")).not.toBeNull();
     expect(renderer.debugLayerFor(image)?.classList.contains("eg-compact")).toBe(true);
@@ -645,8 +638,8 @@ describe("ProtectionRenderer", () => {
     frames.flush();
 
     const layer = renderer.debugLayerFor(image);
-    expect(layer?.querySelector(".eg-caption")?.classList).toContain("eg-caption-collapsed");
-    expect(layer?.querySelector(".eg-description-toggle")?.textContent).toBe("ALT");
+    expect(layer?.querySelector(".eg-caption")).toBeNull();
+    expect(layer?.querySelector(".eg-info-button")?.textContent).toBe("i");
     expect(layer?.querySelector(".eg-reveal-surface")?.getAttribute("aria-label")).toContain("A black audio component");
     expect(layer?.querySelector(".eg-goggles")).not.toBeNull();
   });

@@ -239,8 +239,9 @@ test("scales thumbnail controls, frost, and description without losing alignment
     const layer = layers(page).first();
     await assertAligned(target, layer);
     await expect(layer).toHaveClass(/eg-compact/u);
-    await expect(layer.locator(".eg-caption")).toHaveClass(/eg-caption-collapsed/u);
-    await expect(layer.locator(".eg-description-toggle")).toHaveText("ALT");
+    await expect(layer.locator(".eg-caption")).toHaveCount(0);
+    const info = layer.locator(".eg-info-button");
+    await expect(info).toHaveText("i");
 
     await expect.poll(() => layer.evaluate((node) => {
       const goggles = node.querySelector(".eg-goggles")!;
@@ -250,11 +251,18 @@ test("scales thumbnail controls, frost, and description without losing alignment
       };
     })).toEqual({ blur: "blur(12px)", control: 30 });
 
-    await layer.locator(".eg-description-toggle").click();
-    await expect(layer.locator(".eg-description")).toHaveText(/…$/u);
-    await expect(layer.locator(".eg-description-more")).toHaveText("more");
-    await layer.locator(".eg-description-more").click();
-    await expect(layer.locator(".eg-description")).toHaveText(/for expansion$/u);
+    await info.hover();
+    await expect(layer.locator(".eg-info-preview")).toBeVisible();
+    await expect(layer.locator(".eg-info-preview")).toHaveText(/…$/u);
+    await info.click();
+    await expect(layer.locator(".eg-info-panel")).toBeVisible();
+    await expect(layer.locator(".eg-info-description")).toHaveText(/for expansion$/u);
+    await layer.getByRole("button", { name: "Always show descriptions on this site" }).click();
+    await expect(layer.getByRole("button", { name: "Stop always showing descriptions" })).toBeVisible();
+
+    await page.reload();
+    await expect(target).toHaveAttribute("data-eclipse-goggles-protected", "image");
+    await expect(layer.locator(".eg-info-panel")).toBeVisible();
 
     await target.evaluate((node) => {
       Object.assign((node as HTMLElement).style, { width: "320px", height: "240px" });
@@ -738,13 +746,14 @@ test("has accessible goggles navigation, specified caption contrast, and only ap
       name: "Reveal protected media: A moonlit lake beside dark hills",
       exact: true,
     })).toHaveCount(1);
-    await expect(layer.locator("button")).toHaveCount(7);
+    await expect(layer.locator("button")).toHaveCount(8);
     const revealThis = layer.getByRole("button", {
       name: "Reveal protected media: A moonlit lake beside dark hills",
       exact: true,
     });
     const goggles = layer.getByRole("button", { name: "Goggles reveal options" });
-    const descriptionToggle = layer.locator(".eg-description-toggle");
+    const info = layer.locator(".eg-info-button");
+    const always = layer.getByRole("button", { name: "Always show descriptions on this site" });
     const revealMenuItem = layer.locator(".eg-menu-reveal");
     const revealAll = layer.getByRole("button", {
       name: "Reveal all protected media on this page",
@@ -759,12 +768,12 @@ test("has accessible goggles navigation, specified caption contrast, and only ap
     await page.keyboard.press("Tab");
     expect(await revealThis.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
     await page.keyboard.press("Tab");
-    expect(await descriptionToggle.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
+    expect(await info.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
     await page.keyboard.press("Enter");
-    await expect(descriptionToggle).toHaveAttribute("aria-label", "Show description");
-    await expect(layer.locator(".eg-caption")).toHaveClass(/eg-caption-collapsed/u);
-    await page.keyboard.press("Enter");
-    await expect(descriptionToggle).toHaveAttribute("aria-label", "Hide description");
+    await expect(info).toHaveAttribute("aria-label", "Hide image description");
+    await expect(layer.locator(".eg-info-panel")).toBeVisible();
+    await page.keyboard.press("Tab");
+    expect(await always.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
     await page.keyboard.press("Tab");
     expect(await goggles.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
     await page.keyboard.press("Enter");
@@ -788,12 +797,12 @@ test("has accessible goggles navigation, specified caption contrast, and only ap
     }), "Tab navigation did not return to Goggles settings").toBe(true);
     const presentation = await layer.evaluate((node) => {
       const focusedStyle = getComputedStyle(node.querySelector(".eg-menu-brand")!);
-      const captionStyle = getComputedStyle(node.querySelector(".eg-caption")!);
+      const panelStyle = getComputedStyle(node.querySelector(".eg-info-panel")!);
       return {
         outlineColor: focusedStyle.outlineColor,
         outlineWidth: focusedStyle.outlineWidth,
-        color: captionStyle.color,
-        background: captionStyle.backgroundColor,
+        color: panelStyle.color,
+        background: panelStyle.backgroundColor,
         gogglesWidth: Math.round(node.querySelector(".eg-goggles")!.getBoundingClientRect().width),
         gogglesHeight: Math.round(node.querySelector(".eg-goggles")!.getBoundingClientRect().height),
       };
@@ -802,7 +811,7 @@ test("has accessible goggles navigation, specified caption contrast, and only ap
       outlineColor: "rgb(255, 255, 255)",
       outlineWidth: "2px",
       color: "rgb(255, 255, 255)",
-      background: "rgba(31, 33, 35, 0.76)",
+      background: "rgba(31, 33, 35, 0.94)",
       gogglesWidth: 44,
       gogglesHeight: 44,
     });

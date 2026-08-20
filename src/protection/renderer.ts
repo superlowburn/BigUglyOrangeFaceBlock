@@ -300,47 +300,49 @@ export class ProtectionRenderer {
     revealSurface.addEventListener("click", (event) => this.activate(record, event, "reveal"));
 
     const children: HTMLElement[] = [revealSurface];
-    const caption = this.document.createElement("div");
-    caption.className = "eg-caption";
-    const copy = this.document.createElement("span");
-    copy.id = "eg-description";
-    copy.className = "eg-description";
+    const infoControl = this.document.createElement("div");
+    infoControl.className = "eg-info-control";
+    const info = this.createButton("i", "eg-info-button", "Show image description");
+    info.setAttribute("aria-expanded", "false");
+    info.setAttribute("aria-controls", "eg-info-panel");
     const characters = Array.from(description);
     const preview = characters.length > 50 ? `${characters.slice(0, 50).join("")}…` : description;
-    copy.textContent = preview;
-    copy.title = description;
-    const more = characters.length > 50
-      ? this.createButton("more", "eg-description-more", "Show full description")
-      : null;
-    more?.addEventListener("click", (event) => {
+    const previewCopy = this.document.createElement("div");
+    previewCopy.className = "eg-info-preview";
+    previewCopy.textContent = preview;
+    const panel = this.document.createElement("div");
+    panel.id = "eg-info-panel";
+    panel.className = "eg-info-panel";
+    const fullCopy = this.document.createElement("div");
+    fullCopy.className = "eg-info-description";
+    fullCopy.textContent = description;
+    const always = this.createButton(
+      "Always show descriptions on this site",
+      "eg-info-always",
+      "Always show descriptions on this site",
+    );
+    info.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      record.descriptionVisible = !record.descriptionVisible;
+      this.updateDescriptionState(record);
+    });
+    always.addEventListener("click", (event) => {
       if (!this.trustedActivation(event)) return;
       event.preventDefault();
       event.stopPropagation();
-      const expanded = more.textContent === "less";
-      copy.textContent = expanded ? preview : description;
-      copy.classList.toggle("eg-description-expanded", !expanded);
-      more.textContent = expanded ? "more" : "less";
-      more.setAttribute("aria-label", expanded ? "Show full description" : "Show shorter description");
+      record.onToggleDescriptions();
     });
-    const toggle = compact
-      ? this.createButton("ALT", "eg-description-toggle", "Show description")
-      : this.createIconButton("eg-description-toggle", "Hide description", "chevron");
-    toggle.setAttribute("aria-expanded", "true");
-    toggle.setAttribute("aria-controls", copy.id);
-    toggle.addEventListener("click", (event) => {
+    infoControl.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || !record.descriptionVisible) return;
       event.preventDefault();
-      event.stopPropagation();
-      record.descriptionVisible = caption.classList.contains("eg-caption-collapsed");
-      this.setCaptionCollapsed(caption, toggle, !record.descriptionVisible);
+      record.descriptionVisible = false;
+      this.updateDescriptionState(record);
+      info.focus();
     });
-    toggle.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") this.setCaptionCollapsed(caption, toggle, true);
-    });
-    this.setCaptionCollapsed(caption, toggle, compact || !record.descriptionVisible);
-    caption.append(copy);
-    if (more) caption.append(more);
-    caption.append(toggle);
-    children.push(caption);
+    panel.append(fullCopy, always);
+    infoControl.append(info, previewCopy, panel);
+    children.push(infoControl);
 
     const gogglesControl = this.document.createElement("div");
     gogglesControl.className = "eg-goggles-control";
@@ -393,6 +395,7 @@ export class ProtectionRenderer {
     });
     children.push(gogglesControl);
     layer.replaceChildren(...children);
+    this.updateDescriptionState(record);
   }
 
   private createButton(text: string, className: string, label: string): HTMLButtonElement {
@@ -408,17 +411,15 @@ export class ProtectionRenderer {
   private createIconButton(
     className: string,
     label: string,
-    icon: "goggles" | "undo" | "chevron",
+    icon: "goggles" | "undo",
   ): HTMLButtonElement {
     const button = this.createButton("", className, label);
     const svg = this.document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("viewBox", "0 0 24 24");
     svg.setAttribute("aria-hidden", "true");
     svg.innerHTML = icon === "goggles"
-      ? '<circle cx="7" cy="12" r="3.5"/><circle cx="17" cy="12" r="3.5"/><path d="M10.5 12h3M1.5 10.5l2 1M22.5 10.5l-2 1"/>'
-      : icon === "undo"
-      ? '<path d="M7 7H3V3M3.5 7A8 8 0 1 1 5 16"/>'
-      : '<path d="m8 10 4 4 4-4"/>';
+      ? '<path d="m2.5 9 2-3h5L11 9v6l-1.5 3h-5l-2-3V9Zm10.5 0 1.5-3h5l2 3v6l-2 3h-5L13 15V9Z"/><circle cx="6.75" cy="12" r="2.75"/><circle cx="17.25" cy="12" r="2.75"/><path d="M11 10.5c.7-.8 1.3-.8 2 0M2.5 10 1 9m21 1 1-1"/>'
+      : '<path d="M7 7H3V3M3.5 7A8 8 0 1 1 5 16"/>';
     button.append(svg);
     return button;
   }
@@ -460,22 +461,25 @@ export class ProtectionRenderer {
     return brand;
   }
 
-  private setCaptionCollapsed(
-    caption: HTMLElement,
-    toggle: HTMLButtonElement,
-    collapsed: boolean,
-  ): void {
-    caption.classList.toggle("eg-caption-collapsed", collapsed);
-    toggle.setAttribute("aria-expanded", String(!collapsed));
-    toggle.setAttribute("aria-label", collapsed ? "Show description" : "Hide description");
+  private updateDescriptionState(record: ProtectionRecord): void {
+    const control = record.layer.querySelector<HTMLElement>(".eg-info-control");
+    const info = record.layer.querySelector<HTMLButtonElement>(".eg-info-button");
+    const always = record.layer.querySelector<HTMLButtonElement>(".eg-info-always");
+    control?.classList.toggle("eg-info-pinned", record.descriptionVisible);
+    info?.setAttribute("aria-expanded", String(record.descriptionVisible));
+    info?.setAttribute("aria-label", record.descriptionVisible ? "Hide image description" : "Show image description");
+    if (always) {
+      always.textContent = record.pageDescriptionsVisible
+        ? "Stop always showing descriptions"
+        : "Always show descriptions on this site";
+      always.setAttribute("aria-label", always.textContent);
+    }
   }
 
   private setRecordDescriptionVisible(record: ProtectionRecord, visible: boolean): void {
     record.descriptionVisible = visible;
     record.pageDescriptionsVisible = visible;
-    const caption = record.layer.querySelector<HTMLElement>(".eg-caption");
-    const toggle = record.layer.querySelector<HTMLButtonElement>(".eg-description-toggle");
-    if (caption && toggle) this.setCaptionCollapsed(caption, toggle, !visible);
+    this.updateDescriptionState(record);
   }
 
   private isCompact(record: ProtectionRecord, currentBox?: DOMRect): boolean {

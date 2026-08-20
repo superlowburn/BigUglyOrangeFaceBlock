@@ -19,6 +19,7 @@ export interface ContentBootstrapDependencies {
   parentLocation: () => ParentLocation | null;
   createController: () => ContentControllerPort;
   sendMessage: (message: ExtensionMessage) => Promise<unknown>;
+  getDescriptionsVisible: (origin: string) => Promise<boolean>;
   watchPolicy: (origin: string, listener: (mode: SiteMode) => void) => () => void;
   addPageHideListener: (listener: () => void) => void;
 }
@@ -45,7 +46,10 @@ export async function bootstrapContentScript(
     if (!isPolicyContext(response)) throw new TypeError("Invalid policy response");
     if (disposed) return;
 
-    controller.start(response);
+    const descriptionsVisible = await dependencies.getDescriptionsVisible(response.origin)
+      .catch(() => false);
+    if (disposed) return;
+    controller.start({ ...response, descriptionsVisible });
     stopWatching = dependencies.watchPolicy(response.origin, (mode) => {
       controller.applyMode(mode);
     });
@@ -76,9 +80,11 @@ function productionDependencies(): ContentBootstrapDependencies {
     createController: () => new ContentController({
       enableSiteControl: window === window.top,
       setSiteMode: (origin, mode) => store.set(origin, mode),
+      setDescriptionsVisible: (origin, visible) => store.setDescriptionsVisible(origin, visible),
       openSettings: () => chrome.runtime.sendMessage({ type: "options:open" }),
     }),
     sendMessage: (message) => chrome.runtime.sendMessage(message),
+    getDescriptionsVisible: (origin) => store.getDescriptionsVisible(origin),
     watchPolicy: (origin, listener) => store.watch(origin, listener),
     addPageHideListener: (listener) => {
       window.addEventListener("pagehide", listener, { once: true });
