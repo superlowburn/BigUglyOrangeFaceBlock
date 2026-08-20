@@ -10,7 +10,6 @@ export const protectionStyles = `
 }
 
 .eg-layer {
-  appearance: none;
   border: 0;
   padding: 0;
   color: inherit;
@@ -20,7 +19,7 @@ export const protectionStyles = `
   z-index: 2147483647;
   overflow: hidden;
   pointer-events: auto;
-  cursor: pointer;
+  cursor: default;
   font: 14px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -31,7 +30,7 @@ export const protectionStyles = `
 .eg-caption {
   position: absolute;
   left: 12px;
-  right: 12px;
+  width: min(calc(100% - 24px), calc(100vw - 48px));
   bottom: 12px;
   display: flex;
   align-items: center;
@@ -48,7 +47,15 @@ export const protectionStyles = `
   overflow-wrap: anywhere;
 }
 
-.eg-action {
+.eg-actions {
+  display: flex;
+  flex: none;
+  gap: 7px;
+}
+
+.eg-control,
+.eg-reprotect {
+  appearance: none;
   flex: none;
   border: 1px solid rgba(38, 41, 44, 0.32);
   border-radius: 7px;
@@ -59,7 +66,8 @@ export const protectionStyles = `
   font: inherit;
 }
 
-.eg-layer:focus-visible {
+.eg-control:focus-visible,
+.eg-reprotect:focus-visible {
   outline: 3px solid #1664d7;
   outline-offset: 2px;
 }
@@ -71,6 +79,14 @@ export const protectionStyles = `
   background: rgba(250, 250, 250, 0.94);
 }
 
+.eg-compact .eg-actions {
+  gap: 5px;
+}
+
+.eg-compact .eg-control {
+  padding: 5px 7px;
+}
+
 .eg-layer.eg-revealed {
   overflow: visible;
   pointer-events: none;
@@ -78,17 +94,12 @@ export const protectionStyles = `
 }
 
 .eg-reprotect {
-  border: 1px solid rgba(38, 41, 44, 0.32);
-  border-radius: 7px;
-  padding: 7px 10px;
-  color: #26292c;
-  background: #fff;
   opacity: 0;
   pointer-events: none;
   transition: opacity 120ms ease;
 }
 
-.eg-target-hover.eg-reprotect,
+.eg-target-hover .eg-reprotect,
 .eg-reprotect:focus,
 .eg-reprotect:focus-visible {
   opacity: 1;

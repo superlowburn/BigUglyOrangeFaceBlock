@@ -31,10 +31,10 @@ If developing from a worktree, build there for testing; the path above is the in
 The popup stores one mode for each site origin:
 
 - **Trusted — Show normally.** All Goggles layers are removed immediately and new media is left alone.
-- **Protected — Frost individually.** This is the default. Reveal affects one item and lasts until the document is reloaded or replaced.
-- **Strict — Always re-protect.** Reveal still works one item at a time, but an item is frosted again after it has been completely outside the viewport for two continuous seconds.
+- **Protected — Frost individually.** This is the default. Reveal one item or all currently protected media; newly loaded media remains frosted.
+- **Strict — Always re-protect.** Reveal one or all, but each item is frosted again after it has been completely outside the viewport for two continuous seconds.
 
-A protected item uses a 25px neutral blur with a 10% light-gray layer. Its bottom dock shows the page's plain-text description and a **Reveal** button. Click the surface or focus it and press Enter or Space. A revealed image stays revealed according to the current mode without changing its source or dimensions.
+A protected item uses a 25px neutral blur with a 10% light-gray layer. Its bottom dock shows the page's plain-text description with **Reveal this** and **Reveal all** buttons. Both controls work with a mouse or keyboard. A revealed image stays revealed according to the current mode without changing its source or dimensions.
 
 Native video is paused and muted when protected. Reveal removes the input-blocking layer but never plays or unmutes the video; playback, sound, and fullscreen remain separate actions in the site's player. Recognized YouTube and Vimeo embed navigations are redirected to an inert packaged document before any provider request. Revealing one frame installs a temporary, tab-scoped browser allow rule, sets only that iframe to its unique selected URL, forces `autoplay=0`, and leaves matching sibling embeds withheld.
 

@@ -14,6 +14,7 @@ export interface ProtectionOptions {
   description: string;
   mode: SiteMode;
   onReveal: () => void;
+  onRevealAll: () => void;
   onReprotect: () => void;
 }
 
@@ -30,8 +31,9 @@ interface ProtectionRecord {
   candidate: MediaCandidate;
   description: string;
   host: HTMLElement;
-  layer: HTMLButtonElement;
+  layer: HTMLDivElement;
   onReveal: () => void;
+  onRevealAll: () => void;
   onReprotect: () => void;
   mode: SiteMode;
   revealed: boolean;
@@ -77,8 +79,7 @@ export class ProtectionRenderer {
     if (existing && !existing.removed) return existing.handle;
 
     const { host, shadow } = this.createRoot(candidate.element);
-    const layer = this.document.createElement("button");
-    layer.type = "button";
+    const layer = this.document.createElement("div");
     layer.className = "eg-layer";
     shadow.append(layer);
 
@@ -97,6 +98,7 @@ export class ProtectionRenderer {
       host,
       layer,
       onReveal: options.onReveal,
+      onRevealAll: options.onRevealAll,
       onReprotect: options.onReprotect,
       mode: options.mode,
       revealed: false,
@@ -107,7 +109,6 @@ export class ProtectionRenderer {
       onMouseLeave: () => layer.classList.remove("eg-target-hover"),
     };
 
-    layer.addEventListener("click", (event) => this.activate(record, event));
     candidate.element.addEventListener("mouseenter", record.onMouseEnter);
     candidate.element.addEventListener("mouseleave", record.onMouseLeave);
 
@@ -120,7 +121,7 @@ export class ProtectionRenderer {
     return handle;
   }
 
-  debugLayerFor(element: HTMLElement): HTMLButtonElement | null {
+  debugLayerFor(element: HTMLElement): HTMLDivElement | null {
     return this.records.get(element)?.layer ?? null;
   }
 
@@ -145,24 +146,22 @@ export class ProtectionRenderer {
     return { host, shadow };
   }
 
-  private activate(record: ProtectionRecord, event: Event): void {
+  private activate(record: ProtectionRecord, event: Event, action: "reveal" | "reveal-all" | "reprotect"): void {
     if (!this.trustedActivation(event) || record.removed) return;
     event.preventDefault();
     event.stopPropagation();
-    if (record.revealed) {
-      if (record.layer.classList.contains("eg-reprotect")) record.handle.reprotect();
-      return;
-    }
-
-    record.handle.reveal();
+    if (action === "reprotect") record.handle.reprotect();
+    else if (action === "reveal-all") record.onRevealAll();
+    else record.handle.reveal();
   }
 
   private reveal(record: ProtectionRecord): void {
     if (record.removed || record.revealed) return;
     record.revealed = true;
-    record.layer.className = "eg-layer eg-revealed eg-reprotect";
-    record.layer.setAttribute("aria-label", "Protect again");
-    record.layer.textContent = "Protect again";
+    record.layer.className = "eg-layer eg-revealed";
+    const reprotect = this.createButton("Protect again", "eg-reprotect", "Protect again");
+    reprotect.addEventListener("click", (event) => this.activate(record, event, "reprotect"));
+    record.layer.replaceChildren(reprotect);
     record.candidate.element.removeAttribute("data-eclipse-goggles-protected");
     record.onReveal();
     this.updateRecord(record);
@@ -187,7 +186,7 @@ export class ProtectionRenderer {
   private renderProtected(record: ProtectionRecord, box?: DOMRect): void {
     const { layer, description } = record;
     layer.className = "eg-layer eg-frost";
-    layer.setAttribute("aria-label", `Reveal protected media: ${description}`);
+    layer.removeAttribute("aria-label");
 
     const caption = this.document.createElement("div");
     caption.className = "eg-caption";
@@ -201,11 +200,32 @@ export class ProtectionRenderer {
       caption.append(copy);
     }
 
-    const reveal = this.document.createElement("span");
-    reveal.className = "eg-action";
-    reveal.textContent = compact ? `Reveal ${mediaLabel(record.candidate.kind)}` : "Reveal";
-    caption.append(reveal);
+    const actions = this.document.createElement("span");
+    actions.className = "eg-actions";
+    const reveal = this.createButton(
+      compact ? "This" : "Reveal this",
+      "eg-control eg-reveal-this",
+      `Reveal protected media: ${description}`,
+    );
+    const revealAll = this.createButton(
+      compact ? "All" : "Reveal all",
+      "eg-control eg-reveal-all",
+      "Reveal all protected media on this page",
+    );
+    reveal.addEventListener("click", (event) => this.activate(record, event, "reveal"));
+    revealAll.addEventListener("click", (event) => this.activate(record, event, "reveal-all"));
+    actions.append(reveal, revealAll);
+    caption.append(actions);
     layer.replaceChildren(caption);
+  }
+
+  private createButton(text: string, className: string, label: string): HTMLButtonElement {
+    const button = this.document.createElement("button");
+    button.type = "button";
+    button.className = className;
+    button.textContent = text;
+    button.setAttribute("aria-label", label);
+    return button;
   }
 
   private isCompact(record: ProtectionRecord, currentBox?: DOMRect): boolean {

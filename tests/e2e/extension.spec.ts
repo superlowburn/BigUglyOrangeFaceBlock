@@ -140,6 +140,16 @@ function layerWithText(scope: Page | Frame, text: string): Locator {
   return layers(scope).filter({ hasText: text });
 }
 
+function revealThisWithText(scope: Page | Frame, text: string): Locator {
+  return layerWithText(scope, text).getByRole("button", { name: /Reveal protected media:/ });
+}
+
+function revealAllWithText(scope: Page | Frame, text: string): Locator {
+  return layerWithText(scope, text).getByRole("button", {
+    name: "Reveal all protected media on this page",
+  });
+}
+
 async function setMode(worker: Worker, mode: "trusted" | "protected" | "strict"): Promise<void> {
   await worker.evaluate(
     async ({ key, value }) => chrome.storage.local.set({ [key]: value }),
@@ -158,6 +168,11 @@ async function assertAligned(target: Locator, layer: Locator): Promise<void> {
       Math.abs(targetBox.height - layerBox.height),
     );
   }).toBeLessThanOrEqual(1);
+}
+
+async function scrollDockIntoView(target: Locator, layer: Locator): Promise<void> {
+  await target.evaluate((node) => node.scrollIntoView({ block: "end" }));
+  await assertAligned(target, layer);
 }
 
 function rawRequest(path: string): Promise<number> {
@@ -219,13 +234,15 @@ test("protects article images", async () => {
     await expect(layers(page)).toHaveCount(3);
     await expect(layerWithText(page, "A moonlit lake beside dark hills")).toBeVisible();
 
-    await layerWithText(page, "A moonlit lake").click();
+    await scrollDockIntoView(page.locator("#first"), layerWithText(page, "A moonlit lake"));
+    await revealThisWithText(page, "A moonlit lake").click();
     await expect(page.locator("#first")).not.toHaveAttribute("data-eclipse-goggles-protected", "image");
     await expect(page.locator("#second")).toHaveAttribute("data-eclipse-goggles-protected", "image");
 
-    await layerWithText(page, "A red kite").focus();
+    await revealAllWithText(page, "A red kite").focus();
     await page.keyboard.press("Enter");
     await expect(page.locator("#second")).not.toHaveAttribute("data-eclipse-goggles-protected", "image");
+    await expect(page.locator(protectedSelector)).toHaveCount(0);
   } finally {
     await closeExtension(extension);
   }
@@ -287,13 +304,11 @@ test("keeps reveal controls outside linked images and button-wrapped pictures", 
     });
 
     const linkedReveal = layerWithText(page, "A linked mountain image");
-    await linked.scrollIntoViewIfNeeded();
-    await assertAligned(linked, linkedReveal);
-    await linkedReveal.click();
+    await scrollDockIntoView(linked, linkedReveal);
+    await revealThisWithText(page, "A linked mountain image").click();
     const pictureReveal = layerWithText(page, "A button wrapped picture");
-    await pictured.scrollIntoViewIfNeeded();
-    await assertAligned(pictured, pictureReveal);
-    await pictureReveal.click();
+    await scrollDockIntoView(pictured, pictureReveal);
+    await revealThisWithText(page, "A button wrapped picture").click();
     expect(await page.evaluate(() =>
       (window as typeof window & { ancestorActivations: number }).ancestorActivations
     )).toBe(0);
@@ -412,7 +427,8 @@ test("Strict mode re-protects a revealed image after two seconds fully away", as
     await setMode(worker, "strict");
     await page.goto(`${fixtureOrigin}/dynamic-feed.html`);
     await expect(page.locator("#strict-image")).toHaveAttribute("data-eclipse-goggles-protected", "image");
-    await layerWithText(page, "A lighthouse").click();
+    await scrollDockIntoView(page.locator("#strict-image"), layerWithText(page, "A lighthouse"));
+    await revealThisWithText(page, "A lighthouse").click();
     await expect(page.locator("#strict-image")).not.toHaveAttribute("data-eclipse-goggles-protected", "image");
 
     const scrolledAt = Date.now();
@@ -451,7 +467,8 @@ test("secures native autoplay video and reveal never starts or unmutes it", asyn
     });
     expect(coveredTarget).toBe(true);
 
-    await layerWithText(page, "A looping color field").click();
+    await scrollDockIntoView(video, layerWithText(page, "A looping color field"));
+    await revealThisWithText(page, "A looping color field").click();
     await expect(video).not.toHaveAttribute("data-eclipse-goggles-protected", "video");
     expect(await video.evaluate((node) => {
       const media = node as HTMLVideoElement;
@@ -490,8 +507,7 @@ test("withholds provider requests until one exact trusted reveal and re-protecti
       name: "Reveal protected media: YouTube astronomy video",
       exact: true,
     });
-    await youtube.scrollIntoViewIfNeeded();
-    await assertAligned(youtube, youtubeReveal);
+    await scrollDockIntoView(youtube, layers(page).filter({ has: youtubeReveal }));
     await youtubeReveal.click();
     await expect.poll(async () => ({
       requests: extension.providerRequests.length,
@@ -626,25 +642,35 @@ test("has visible keyboard focus, specified caption contrast, and only approved 
       name: "Reveal protected media: A moonlit lake beside dark hills",
       exact: true,
     })).toHaveCount(1);
-    await expect(layer.locator("button, a, input, select, textarea, [role=button]")).toHaveCount(0);
+    await expect(layer.locator("button")).toHaveCount(2);
+    const revealThis = layer.getByRole("button", {
+      name: "Reveal protected media: A moonlit lake beside dark hills",
+      exact: true,
+    });
+    const revealAll = layer.getByRole("button", {
+      name: "Reveal all protected media on this page",
+      exact: true,
+    });
     await page.locator("#before-media").focus();
     await page.keyboard.press("Tab");
-    expect(await layer.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
+    expect(await revealThis.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
+    await page.keyboard.press("Tab");
+    expect(await revealAll.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
     await page.keyboard.press("Tab");
     await expect(page.locator("#after-first-media")).toBeFocused();
     await page.keyboard.press("Shift+Tab");
-    expect(await layer.evaluate((node) => {
+    expect(await revealAll.evaluate((node) => {
       const root = node.getRootNode();
       return root instanceof ShadowRoot &&
         root.activeElement === node &&
         document.activeElement === root.host;
-    }), "Tab navigation did not return to the protected media layer").toBe(true);
+    }), "Tab navigation did not return to Reveal all").toBe(true);
     const presentation = await layer.evaluate((node) => {
-      const layerStyle = getComputedStyle(node);
+      const focusedStyle = getComputedStyle(node.querySelector(".eg-reveal-all")!);
       const captionStyle = getComputedStyle(node.querySelector(".eg-caption")!);
       return {
-        outlineColor: layerStyle.outlineColor,
-        outlineWidth: layerStyle.outlineWidth,
+        outlineColor: focusedStyle.outlineColor,
+        outlineWidth: focusedStyle.outlineWidth,
         color: captionStyle.color,
         background: captionStyle.backgroundColor,
       };

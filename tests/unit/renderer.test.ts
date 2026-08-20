@@ -53,14 +53,22 @@ function frameQueue(): {
 function protect(
   renderer: ProtectionRenderer,
   element: HTMLElement,
-  options: { kind?: MediaKind; mode?: SiteMode; onReveal?: () => void; onReprotect?: () => void } = {},
+  options: {
+    kind?: MediaKind;
+    mode?: SiteMode;
+    onReveal?: () => void;
+    onRevealAll?: () => void;
+    onReprotect?: () => void;
+  } = {},
 ) {
-  return renderer.protect(candidate(element, options.kind), {
+  const protectionOptions = {
     description: "A black audio component",
     mode: options.mode ?? "protected",
     onReveal: options.onReveal ?? vi.fn(),
+    onRevealAll: options.onRevealAll ?? vi.fn(),
     onReprotect: options.onReprotect ?? vi.fn(),
-  });
+  };
+  return renderer.protect(candidate(element, options.kind), protectionOptions);
 }
 
 afterEach(() => {
@@ -94,7 +102,7 @@ describe("ProtectionRenderer", () => {
     expect(layer?.style.height).toBe("360px");
   });
 
-  it("exposes one native control adjacent to the protected media in tab order", () => {
+  it("exposes Reveal this and Reveal all as native controls adjacent to the media", () => {
     const before = document.createElement("button");
     before.textContent = "Before";
     const image = document.createElement("img");
@@ -110,9 +118,12 @@ describe("ProtectionRenderer", () => {
     const layer = renderer.debugLayerFor(image);
     expect(host?.hasAttribute("data-eclipse-goggles-root")).toBe(true);
     expect(host?.nextElementSibling).toBe(after);
-    expect(layer?.tagName).toBe("BUTTON");
-    expect(layer?.querySelectorAll("button, a, input, select, textarea, [role=button]")).toHaveLength(0);
-    expect(layer?.getAttribute("aria-label")).toBe(
+    expect(layer?.tagName).toBe("DIV");
+    expect(Array.from(layer?.querySelectorAll("button") ?? []).map((button) => button.textContent)).toEqual([
+      "Reveal this",
+      "Reveal all",
+    ]);
+    expect(layer?.querySelector(".eg-reveal-this")?.getAttribute("aria-label")).toBe(
       "Reveal protected media: A black audio component",
     );
   });
@@ -137,7 +148,7 @@ describe("ProtectionRenderer", () => {
 
     const host = link.nextElementSibling as HTMLElement | null;
     const activation = new MouseEvent("click", { bubbles: true, cancelable: true });
-    const uncancelled = renderer.debugLayerFor(image)?.dispatchEvent(activation);
+    const uncancelled = renderer.debugLayerFor(image)?.querySelector(".eg-reveal-this")?.dispatchEvent(activation);
 
     expect(host?.hasAttribute("data-eclipse-goggles-root")).toBe(true);
     expect(host?.nextElementSibling).toBe(after);
@@ -181,7 +192,9 @@ describe("ProtectionRenderer", () => {
     const firstHandle = protect(renderer, first, { onReveal: onFirstReveal });
     const secondHandle = protect(renderer, second, { onReveal: onSecondReveal });
 
-    renderer.debugLayerFor(first)?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    renderer.debugLayerFor(first)?.querySelector(".eg-reveal-this")?.dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
 
     expect(onFirstReveal).toHaveBeenCalledTimes(1);
     expect(onSecondReveal).not.toHaveBeenCalled();
@@ -189,6 +202,23 @@ describe("ProtectionRenderer", () => {
     expect(first.hasAttribute("data-eclipse-goggles-protected")).toBe(false);
     expect(secondHandle.isRevealed()).toBe(false);
     expect(second.getAttribute("data-eclipse-goggles-protected")).toBe("image");
+  });
+
+  it("offers Reveal all from every protected item", () => {
+    const image = document.createElement("img");
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(0, 0, 640, 360));
+    document.body.append(image);
+    const onRevealAll = vi.fn();
+    const renderer = new ProtectionRenderer({
+      trustedActivation: (event) => event instanceof MouseEvent && event.type === "click",
+    });
+    protect(renderer, image, { onRevealAll });
+
+    renderer.debugLayerFor(image)?.querySelector(".eg-reveal-all")?.dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
+
+    expect(onRevealAll).toHaveBeenCalledTimes(1);
   });
 
   it("rejects page-dispatched synthetic pointer activation", () => {
@@ -199,7 +229,9 @@ describe("ProtectionRenderer", () => {
     const renderer = new ProtectionRenderer();
     const handle = protect(renderer, image, { onReveal });
 
-    renderer.debugLayerFor(image)?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    renderer.debugLayerFor(image)?.querySelector(".eg-reveal-this")?.dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
 
     expect(onReveal).not.toHaveBeenCalled();
     expect(handle.isRevealed()).toBe(false);
@@ -221,11 +253,11 @@ describe("ProtectionRenderer", () => {
     const handle = protect(renderer, image, { onReveal });
     const layer = renderer.debugLayerFor(image);
 
-    layer?.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+    layer?.querySelector(".eg-reveal-this")?.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
     expect(onReveal).not.toHaveBeenCalled();
     expect(handle.isRevealed()).toBe(false);
 
-    layer?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    layer?.querySelector(".eg-reveal-this")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(onReveal).toHaveBeenCalledTimes(1);
     expect(handle.isRevealed()).toBe(true);
   });
@@ -248,7 +280,7 @@ describe("ProtectionRenderer", () => {
 
     const protectAgain = renderer.debugLayerFor(first);
     expect(protectAgain?.textContent).toBe("Protect again");
-    protectAgain?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    protectAgain?.querySelector(".eg-reprotect")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
     expect(onFirstReprotect).toHaveBeenCalledTimes(1);
     expect(onSecondReprotect).not.toHaveBeenCalled();
@@ -312,8 +344,11 @@ describe("ProtectionRenderer", () => {
     protect(renderer, image);
 
     const button = renderer.debugLayerFor(image);
-    expect(button?.textContent).toBe("Reveal image");
-    expect(button?.getAttribute("aria-label")).toContain("A black audio component");
+    expect(Array.from(button?.querySelectorAll("button") ?? []).map((control) => control.textContent)).toEqual([
+      "This",
+      "All",
+    ]);
+    expect(button?.querySelector(".eg-reveal-this")?.getAttribute("aria-label")).toContain("A black audio component");
     expect(renderer.debugLayerFor(image)?.classList.contains("eg-compact")).toBe(true);
   });
 
@@ -330,8 +365,11 @@ describe("ProtectionRenderer", () => {
     frames.flush();
 
     const button = renderer.debugLayerFor(image);
-    expect(button?.textContent).toBe("Reveal image");
-    expect(button?.getAttribute("aria-label")).toContain("A black audio component");
+    expect(Array.from(button?.querySelectorAll("button") ?? []).map((control) => control.textContent)).toEqual([
+      "This",
+      "All",
+    ]);
+    expect(button?.querySelector(".eg-reveal-this")?.getAttribute("aria-label")).toContain("A black audio component");
   });
 
   it("watches revealed strict items and disposes the watch when they are re-protected", () => {

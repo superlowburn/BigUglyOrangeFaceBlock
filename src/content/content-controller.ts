@@ -246,6 +246,7 @@ export class ContentController {
             this.reportProviderFailure(candidate.element);
           });
         },
+        onRevealAll: () => this.revealAll(),
         onReprotect: () => this.enforceRecord(record),
       });
       record = { candidate, handle };
@@ -259,6 +260,10 @@ export class ContentController {
       if (prepared) this.restoreMedia(candidate);
       throw error;
     }
+  }
+
+  private revealAll(): void {
+    for (const record of [...this.records]) record.handle.reveal();
   }
 
   private prepareMedia(candidate: MediaCandidate): string | null | undefined {

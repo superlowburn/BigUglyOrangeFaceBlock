@@ -206,6 +206,25 @@ describe("ContentController", () => {
     expect(harness.nativeVideo.reprotect).toHaveBeenCalledWith(first);
   });
 
+  it("reveals every currently protected item from any item's Reveal all action", () => {
+    const first = document.createElement("img");
+    const second = document.createElement("video");
+    document.body.append(first, second);
+    const harness = controllerHarness(
+      new Map<Element, MediaCandidate>([
+        [first, candidate(first, "image")],
+        [second, candidate(second, "native-video")],
+      ]),
+    );
+    harness.controller.start({ origin: "https://news.example", mode: "protected" });
+    harness.observer.emit([first, second]);
+
+    harness.renderer.items[0]?.options.onRevealAll();
+
+    expect(harness.renderer.items.every(({ handle }) => handle.isRevealed())).toBe(true);
+    expect(harness.nativeVideo.release).toHaveBeenCalledWith(second);
+  });
+
   it("gates a provider before rendering and releases or regates only that frame", () => {
     const frame = document.createElement("iframe");
     frame.src = "https://www.youtube.com/embed/abc?start=10";
