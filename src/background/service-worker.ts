@@ -3,7 +3,7 @@ import { isSiteMode, SitePolicyStore } from "../shared/site-policy";
 import { ProviderRequestGate } from "./provider-request-gate";
 
 type StorageArea = {
-  get(key: string): Promise<Record<string, unknown>>;
+  get(key: string | string[]): Promise<Record<string, unknown>>;
   set(items: Record<string, unknown>): Promise<void>;
 };
 
@@ -14,6 +14,7 @@ type MessageSender = { tab?: Tab };
 type WorkerDependencies = {
   storage: StorageArea;
   tabs: { get(tabId: number): Promise<Tab> };
+  openOptionsPage?: () => Promise<void>;
   providerGate?: Pick<ProviderRequestGate, "authorize" | "revoke">;
 };
 
@@ -35,7 +36,14 @@ interface NavigationLifecycleEvents {
   };
 }
 
-type WorkerResponse = PolicyContext | { grantId: number; source: string } | {
+interface FirstRunRuntime {
+  onInstalled: {
+    addListener(listener: (details: { reason: string }) => void): void;
+  };
+  openOptionsPage(): Promise<void>;
+}
+
+type WorkerResponse = PolicyContext | { grantId: number; source: string } | { opened: true } | {
   error: "unsupported-page" | "invalid-message" | "origin-changed";
 };
 
@@ -44,6 +52,8 @@ function isExtensionMessage(message: unknown): message is ExtensionMessage {
 
   switch (message.type) {
     case "policy:get-current":
+      return true;
+    case "options:open":
       return true;
     case "policy:get-tab":
       return "tabId" in message && typeof message.tabId === "number";
@@ -97,6 +107,9 @@ export async function handleExtensionMessage(
   const store = new SitePolicyStore(deps.storage);
 
   switch (message.type) {
+    case "options:open":
+      await (deps.openOptionsPage ?? (() => chrome.runtime.openOptionsPage()))();
+      return { opened: true };
     case "policy:get-current":
       return contextFor(sender.tab, store);
     case "policy:get-tab":
@@ -149,6 +162,12 @@ export async function installProviderGateLifecycle(
   await gate.sweep();
 }
 
+export function installFirstRun(runtime: FirstRunRuntime): void {
+  runtime.onInstalled.addListener(({ reason }) => {
+    if (reason === "install") void runtime.openOptionsPage();
+  });
+}
+
 const productionProviderReady = installProviderGateLifecycle(
   productionProviderGate,
   chrome.tabs,
@@ -165,6 +184,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   void handleExtensionMessage(message, sender, {
     storage: chrome.storage.local,
     tabs: chrome.tabs,
+    openOptionsPage: () => chrome.runtime.openOptionsPage(),
   }).then(sendResponse);
   return true;
 });
+
+if (chrome.runtime.onInstalled) installFirstRun(chrome.runtime);

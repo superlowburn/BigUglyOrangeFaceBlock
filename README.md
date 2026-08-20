@@ -2,7 +2,7 @@
 
 Goggles is a Chrome extension for intentional viewing. It frosts meaningful images, native videos, and recognized YouTube and Vimeo embeds until you choose one item to reveal. It does not try to decide whether an image was made by AI.
 
-**Tagline:** They actually do something.
+**Tagline:** No disturbing surprises.
 
 ## Build and verify
 
@@ -31,16 +31,18 @@ The root manifest loads the production files from `dist`, so run `npm run build`
 The popup stores one mode for each site origin:
 
 - **Trusted — Show normally.** All Goggles layers are removed immediately and new media is left alone.
-- **Protected — Frost individually.** This is the default. Reveal one item or all currently protected media; newly loaded media remains frosted.
+- **Protected — Frost individually.** This is the personal default. Reveal one item or all currently protected media; newly loaded media remains frosted.
 - **Strict — Always re-protect.** Reveal one or all, but each item is frosted again after it has been completely outside the viewport for two continuous seconds.
 
-A protected item uses a 25px neutral blur with a 10% light-gray layer. Click the frost to reveal that item, or open the small goggles menu for **Reveal image**, **Reveal all on page**, **Hide descriptions on page**, and **Always show on this site**. The bottom description drawer shows at most two lines, slides closed without revealing the media, and remains available as a 44px toggle. The page description choice also applies to media loaded later, while any individual description can still be reopened. Trusted sites keep a small Goggles control with **Frost this site again**, while the top-right undo control re-frosts an individually revealed item. Every action works with a mouse or keyboard. A revealed image stays revealed according to the current mode without changing its source or dimensions.
+A protected item uses a size-aware neutral blur with a 10% light-gray layer. Click the frost to reveal that item, or open the small goggles menu for **Reveal image**, **Reveal all on page**, and **Always show on this site**. Goggles scales its blur, inset, and controls for thumbnails, medium media, and large media. Thumbnail descriptions collapse to a small **ALT** drawer; visible descriptions show 50 characters until **more** is selected. The **Goggles** row opens settings. Trusted sites keep a small Goggles control with **Frost this site again**, while the top-right undo control re-frosts an individually revealed item. Every action works with a mouse or keyboard. A revealed image stays revealed according to the current mode without changing its source or dimensions.
+
+On first installation, Goggles opens its local settings page with a live frost demo. **Personal** keeps Protected as the default for new sites. **A gentler web for kids** starts new sites in Strict mode while retaining deliberate individual reveal. This preset is a visual pause, not monitoring or tamper-resistant parental control. The settings page also lists site exceptions so an always-show or always-frost choice can be returned to the default.
 
 Native video is paused and muted when protected. Reveal removes the input-blocking layer but never plays or unmutes the video; playback, sound, and fullscreen remain separate actions in the site's player. Recognized YouTube and Vimeo embed navigations are redirected to an inert packaged document before any provider request. Revealing one frame installs a temporary, tab-scoped browser allow rule, sets only that iframe to its unique selected URL, forces `autoplay=0`, and leaves matching sibling embeds withheld.
 
 ## Privacy and security
 
-Classification, descriptions, policy, and reveal state stay on the device. Goggles has no analytics or server and sends no page text, image, or usage event to an extension-owned service. Site mode is the only persisted product state. Reveal state lasts only for the current document. Page descriptions are inserted as text, never as HTML, and page-generated synthetic clicks cannot reveal media. A deliberately revealed YouTube or Vimeo frame navigates to that provider, as the original page intended, with autoplay disabled.
+Classification, descriptions, policy, and reveal state stay on the device. Goggles has no analytics or server and sends no page text, image, or usage event to an extension-owned service. Site rules and the default new-site mode are the only persisted product state. Reveal state lasts only for the current document. Page descriptions are inserted as text, never as HTML, and page-generated synthetic clicks cannot reveal media. A deliberately revealed YouTube or Vimeo frame navigates to that provider, as the original page intended, with autoplay disabled.
 
 The manifest requests `declarativeNetRequestWithHostAccess` plus host access only for `www.youtube.com`, `www.youtube-nocookie.com`, and `player.vimeo.com`. Those permissions are used solely to redirect recognized embed paths before network and install a temporary browser allow rule for one selected embed. The `webNavigation` permission is used to remove temporary allow rules before top-level navigation; Goggles ignores the event URL and does not keep browsing history. The extension does not inspect request bodies. The inert redirect document is web-accessible because Chrome requires that for a subframe redirect, but it contains no script or data.
 
@@ -57,7 +59,7 @@ The automated browser suite fulfills its fake YouTube and Vimeo destinations loc
 - CSS backgrounds are protected only on content-sized elements without visible text or interactive descendants.
 - Sites can use unusual top-layer or browser-native UI that an extension overlay cannot cover. Automated tests verify overlay alignment at resize, 125% page scale, and device scale factor 2, but manual release checks should still exercise native fullscreen controls on the target Chrome version.
 - Chrome internal pages and other restricted schemes do not permit this content script.
-- Mode preferences are local to the Chrome profile; managed household installation is future work.
+- Mode preferences are local to the Chrome profile. The child-friendly default does not prevent a user from disabling or removing an unmanaged extension.
 
 ## Why a normal router cannot do this
 

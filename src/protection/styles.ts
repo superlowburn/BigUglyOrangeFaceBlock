@@ -24,7 +24,7 @@ export const protectionStyles = `
 }
 
 .eg-frost {
-  backdrop-filter: blur(25px);
+  backdrop-filter: blur(var(--eg-frost-blur, 25px));
   background: rgba(211, 211, 211, 0.10);
 }
 
@@ -71,6 +71,21 @@ export const protectionStyles = `
   transition: max-width 160ms ease, padding 160ms ease, opacity 120ms ease, transform 160ms ease;
 }
 
+.eg-description-expanded {
+  -webkit-line-clamp: unset;
+}
+
+.eg-description-more {
+  align-self: center;
+  padding: 7px 4px;
+  color: #fff;
+  border: 0;
+  background: transparent;
+  font: 600 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .eg-description-toggle {
   appearance: none;
   display: grid;
@@ -109,6 +124,10 @@ export const protectionStyles = `
   transform: translateY(8px);
 }
 
+.eg-caption-collapsed .eg-description-more {
+  display: none;
+}
+
 .eg-caption-collapsed .eg-description-toggle {
   border-left-color: transparent;
 }
@@ -128,8 +147,8 @@ export const protectionStyles = `
 .eg-reprotect {
   appearance: none;
   display: grid;
-  width: 44px;
-  height: 44px;
+  width: var(--eg-control-size, 44px);
+  height: var(--eg-control-size, 44px);
   padding: 10px;
   place-items: center;
   color: #fff;
@@ -165,7 +184,7 @@ export const protectionStyles = `
 
 .eg-menu {
   position: absolute;
-  top: 42px;
+  top: calc(var(--eg-control-size, 44px) - 2px);
   right: 0;
   z-index: 4;
   display: grid;
@@ -210,6 +229,9 @@ export const protectionStyles = `
   border-top: 1px solid rgba(255, 255, 255, 0.12);
   font-size: 12px;
   line-height: 1.25;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
 }
 
 .eg-menu-brand strong {
@@ -223,6 +245,37 @@ export const protectionStyles = `
 
 .eg-menu button:hover {
   background: rgba(255, 255, 255, 0.11);
+}
+
+.eg-compact .eg-goggles,
+.eg-compact .eg-reprotect {
+  padding: 5px;
+}
+
+.eg-compact .eg-goggles svg,
+.eg-compact .eg-reprotect svg {
+  width: 18px;
+  height: 18px;
+}
+
+.eg-compact .eg-caption {
+  max-width: calc(100% - var(--eg-control-size, 30px) - 18px);
+  font-size: 11px;
+}
+
+.eg-compact .eg-description {
+  max-width: 150px;
+  padding: 5px 6px;
+  -webkit-line-clamp: 2;
+}
+
+.eg-compact .eg-description-toggle {
+  flex-basis: 30px;
+  width: 30px;
+  min-height: 30px;
+  padding: 5px;
+  font: 700 9px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing: 0.04em;
 }
 
 .eg-reveal-surface:focus-visible,

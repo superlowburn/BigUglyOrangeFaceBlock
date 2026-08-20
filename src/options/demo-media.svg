@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 560" role="img" aria-labelledby="title">
+  <title id="title">A calm lake beneath wooded hills</title>
+  <rect width="800" height="560" fill="#d8d2bd"/>
+  <rect y="290" width="800" height="270" fill="#89a9a0"/>
+  <path d="M0 330 120 205 250 320 405 165 560 315 690 215 800 300V390H0Z" fill="#526b59"/>
+  <path d="M0 367 135 250 263 351 410 218 575 350 700 260 800 335V398H0Z" fill="#324b3e"/>
+  <path d="M0 415c130-40 250-20 390 12 170 40 270-20 410-4v137H0Z" fill="#aec3bd"/>
+  <circle cx="635" cy="115" r="42" fill="#f4e5a8"/>
+</svg>

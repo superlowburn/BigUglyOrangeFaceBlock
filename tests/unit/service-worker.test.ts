@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   handleExtensionMessage,
+  installFirstRun,
   installProviderGateLifecycle,
 } from "../../src/background/service-worker";
 
@@ -107,6 +108,22 @@ describe("handleExtensionMessage", () => {
     expect(deps.tabs.get).not.toHaveBeenCalled();
     expect(deps.storage.set).not.toHaveBeenCalled();
   });
+
+  it("opens the Goggles settings page from an extension message", async () => {
+    const openOptionsPage = vi.fn().mockResolvedValue(undefined);
+    const deps = {
+      storage: { get: vi.fn(), set: vi.fn() },
+      tabs: { get: vi.fn() },
+      openOptionsPage,
+    };
+
+    await expect(handleExtensionMessage(
+      { type: "options:open" },
+      {},
+      deps,
+    )).resolves.toEqual({ opened: true });
+    expect(openOptionsPage).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("installProviderGateLifecycle", () => {
@@ -135,5 +152,22 @@ describe("installProviderGateLifecycle", () => {
       expect(gate.revokeTab).toHaveBeenCalledWith(8);
     });
     expect(gate.revokeTab).not.toHaveBeenCalledWith(9);
+  });
+});
+
+describe("installFirstRun", () => {
+  it("opens onboarding once for a new install but not an update", async () => {
+    let onInstalled!: (details: { reason: string }) => void;
+    const openOptionsPage = vi.fn().mockResolvedValue(undefined);
+    installFirstRun({
+      onInstalled: { addListener: vi.fn((listener) => { onInstalled = listener; }) },
+      openOptionsPage,
+    });
+
+    onInstalled({ reason: "update" });
+    onInstalled({ reason: "install" });
+    await Promise.resolve();
+
+    expect(openOptionsPage).toHaveBeenCalledTimes(1);
   });
 });

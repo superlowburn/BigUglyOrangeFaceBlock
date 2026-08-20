@@ -1,0 +1,199 @@
+:root {
+  color-scheme: light;
+  --ink: #242522;
+  --muted: #65675f;
+  --paper: #f2f0e8;
+  --line: #cbc7b8;
+  --brass: #a9782b;
+  --lens: #173a2c;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--paper);
+  font: 16px/1.5 "Avenir Next", Avenir, "Segoe UI", sans-serif;
+}
+
+button { font: inherit; }
+
+main {
+  width: min(980px, calc(100% - 40px));
+  margin: 0 auto;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: 1fr minmax(320px, 0.9fr);
+  gap: 64px;
+  min-height: 660px;
+  padding: 34px 0 72px;
+  align-content: space-between;
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 18px;
+}
+
+.brand img { width: 46px; height: 46px; object-fit: contain; }
+
+.hero-copy { align-self: center; }
+
+.eyebrow,
+.section-number {
+  margin: 0 0 18px;
+  color: var(--brass);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.13em;
+}
+
+h1,
+h2,
+p { margin-top: 0; }
+
+h1 {
+  max-width: 620px;
+  margin-bottom: 24px;
+  font: 700 clamp(48px, 7vw, 82px)/0.96 Georgia, serif;
+  letter-spacing: -0.045em;
+}
+
+.hero-copy > p:last-child {
+  max-width: 560px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 19px;
+}
+
+.demo-media {
+  position: relative;
+  align-self: center;
+  overflow: hidden;
+  min-height: 340px;
+  border-radius: 18px;
+  background: #d7d7d1;
+}
+
+.demo-media img {
+  display: block;
+  width: 100%;
+  height: 340px;
+  object-fit: cover;
+}
+
+.demo-frost {
+  position: absolute;
+  inset: 0;
+  background: rgba(211, 211, 211, 0.10);
+  backdrop-filter: blur(25px);
+  transition: opacity 160ms ease;
+}
+
+.demo-media.is-revealed .demo-frost { opacity: 0; pointer-events: none; }
+
+#demo-reveal {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  min-height: 44px;
+  padding: 0 18px;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 7px;
+  background: rgba(31, 33, 35, 0.84);
+  cursor: pointer;
+}
+
+section {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  gap: 30px;
+  padding: 62px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+h2 {
+  margin-bottom: 8px;
+  font: 700 34px/1.08 Georgia, serif;
+  letter-spacing: -0.025em;
+}
+
+.section-intro,
+.privacy-note { color: var(--muted); }
+
+.mode-choices {
+  margin-top: 30px;
+  border-top: 1px solid var(--line);
+}
+
+.mode-choices button,
+.site-rule {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 190px 1fr;
+  gap: 24px;
+  padding: 20px 0;
+  color: var(--ink);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  background: transparent;
+}
+
+.mode-choices button { cursor: pointer; }
+.mode-choices button span,
+.site-rule span span { color: var(--muted); }
+.mode-choices button[aria-pressed="true"] strong { color: var(--lens); }
+.mode-choices button[aria-pressed="true"] strong::before { content: "● "; color: var(--brass); }
+
+.privacy-note { max-width: 660px; margin: 18px 0 0; font-size: 14px; }
+.save-status { min-height: 24px; margin: 8px 0 0; color: var(--lens); font-size: 14px; }
+
+.site-rules { margin-top: 24px; border-top: 1px solid var(--line); }
+.site-rule { grid-template-columns: 1fr auto; align-items: center; }
+.site-rule > span { display: grid; }
+.site-rule button {
+  min-height: 40px;
+  padding: 0 12px;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+.empty-rules { padding: 20px 0; color: var(--muted); }
+
+footer {
+  display: grid;
+  gap: 4px;
+  padding: 38px 0 56px;
+  color: var(--muted);
+}
+footer strong { color: var(--ink); }
+
+button:focus-visible {
+  outline: 3px solid var(--brass);
+  outline-offset: 3px;
+}
+
+@media (max-width: 760px) {
+  main { width: min(100% - 28px, 620px); }
+  .hero { grid-template-columns: 1fr; gap: 38px; min-height: 0; padding-bottom: 48px; }
+  .brand { grid-column: 1; }
+  .demo-media,
+  .demo-media img { min-height: 260px; height: 260px; }
+  section { grid-template-columns: 1fr; gap: 4px; padding: 44px 0; }
+  .mode-choices button { grid-template-columns: 1fr; gap: 5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}

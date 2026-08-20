@@ -63,6 +63,7 @@ export interface ContentControllerDependencies {
   development?: boolean;
   logDiagnostic?: (tagName: string, message: string) => void;
   setSiteMode?: (origin: string, mode: SiteMode) => void | Promise<void>;
+  openSettings?: () => void | Promise<void>;
   enableSiteControl?: boolean;
 }
 
@@ -83,6 +84,7 @@ export class ContentController {
   private readonly development: boolean;
   private readonly logDiagnostic: (tagName: string, message: string) => void;
   private readonly setSiteMode: (origin: string, mode: SiteMode) => void | Promise<void>;
+  private readonly openSettings: () => void | Promise<void>;
   private readonly enableSiteControl: boolean;
   private readonly byElement = new WeakMap<Element, ProtectionRecord>();
   private readonly records = new Set<ProtectionRecord>();
@@ -114,6 +116,7 @@ export class ContentController {
     this.logDiagnostic = dependencies.logDiagnostic ??
       ((tagName, message) => console.warn(`Goggles: ${tagName}: ${message}`));
     this.setSiteMode = dependencies.setSiteMode ?? (() => undefined);
+    this.openSettings = dependencies.openSettings ?? (() => undefined);
     this.enableSiteControl = dependencies.enableSiteControl ?? true;
   }
 
@@ -267,6 +270,7 @@ export class ContentController {
         },
         onRevealAll: () => this.revealAll(),
         onAllowSite: () => this.requestSiteMode("trusted"),
+        onOpenSettings: () => void Promise.resolve(this.openSettings()).catch(() => undefined),
         onToggleDescriptions: () => this.toggleDescriptions(),
         descriptionsVisible: this.descriptionsVisible,
         onReprotect: () => this.enforceRecord(record),
@@ -304,6 +308,7 @@ export class ContentController {
     if (this.enableSiteControl && this.mode === "trusted") {
       this.renderer.showSiteAllowedControl?.({
         onProtectSite: () => this.requestSiteMode("protected"),
+        onOpenSettings: () => void Promise.resolve(this.openSettings()).catch(() => undefined),
       });
       return;
     }

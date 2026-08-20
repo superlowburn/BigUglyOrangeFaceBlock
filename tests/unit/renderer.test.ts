@@ -60,17 +60,20 @@ function protect(
     onReveal?: () => void;
     onRevealAll?: () => void;
     onAllowSite?: () => void;
+    onOpenSettings?: () => void;
     onToggleDescriptions?: () => void;
     descriptionsVisible?: boolean;
     onReprotect?: () => void;
+    description?: string;
   } = {},
 ) {
   const protectionOptions = {
-    description: "A black audio component",
+    description: options.description ?? "A black audio component",
     mode: options.mode ?? "protected",
     onReveal: options.onReveal ?? vi.fn(),
     onRevealAll: options.onRevealAll ?? vi.fn(),
     onAllowSite: options.onAllowSite ?? vi.fn(),
+    onOpenSettings: options.onOpenSettings ?? vi.fn(),
     onToggleDescriptions: options.onToggleDescriptions ?? vi.fn(),
     descriptionsVisible: options.descriptionsVisible ?? true,
     onReprotect: options.onReprotect ?? vi.fn(),
@@ -131,13 +134,12 @@ describe("ProtectionRenderer", () => {
     );
     expect(layer?.querySelector(".eg-goggles")?.getAttribute("aria-expanded")).toBe("false");
     expect(layer?.querySelector(".eg-menu")?.hasAttribute("hidden")).toBe(true);
-    expect(Array.from(layer?.querySelectorAll(".eg-menu button") ?? []).map((button) => button.textContent)).toEqual([
+    expect(Array.from(layer?.querySelectorAll(".eg-menu > button:not(.eg-menu-brand)") ?? []).map((button) => button.textContent)).toEqual([
       "Reveal image",
       "Reveal all on page",
-      "Hide descriptions on page",
       "Always show on this site",
     ]);
-    expect(layer?.querySelector(".eg-menu-brand")?.textContent).toBe("GogglesChoose what you see.");
+    expect(layer?.querySelector(".eg-menu-brand")?.textContent).toBe("GogglesNo disturbing surprises.");
     expect(layer?.querySelector(".eg-goggles svg")?.getAttribute("aria-hidden")).toBe("true");
   });
 
@@ -169,19 +171,17 @@ describe("ProtectionRenderer", () => {
     expect(toggle?.getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("applies a page description choice while preserving individual reopening", () => {
+  it("keeps description control per image without adding a page-level menu action", () => {
     const image = document.createElement("img");
     vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(20, 30, 640, 360));
     document.body.append(image);
-    const onToggleDescriptions = vi.fn();
     const renderer = new ProtectionRenderer({
       trustedActivation: (event) => event instanceof MouseEvent && event.type === "click",
     });
-    const handle = protect(renderer, image, { onToggleDescriptions });
+    const handle = protect(renderer, image);
     const pageDescriptions = renderer.debugLayerFor(image)?.querySelector(".eg-toggle-descriptions");
 
-    pageDescriptions?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    expect(onToggleDescriptions).toHaveBeenCalledTimes(1);
+    expect(pageDescriptions).toBeNull();
 
     const descriptionHandle = handle as ProtectionHandle & {
       setDescriptionVisible?: (visible: boolean) => void;
@@ -190,13 +190,82 @@ describe("ProtectionRenderer", () => {
     descriptionHandle.setDescriptionVisible?.(false);
     expect(renderer.debugLayerFor(image)?.querySelector(".eg-caption")?.classList)
       .toContain("eg-caption-collapsed");
-    expect(pageDescriptions?.textContent).toBe("Show descriptions on page");
 
     renderer.debugLayerFor(image)?.querySelector(".eg-description-toggle")?.dispatchEvent(
       new MouseEvent("click", { bubbles: true }),
     );
     expect(renderer.debugLayerFor(image)?.querySelector(".eg-caption")?.classList)
       .not.toContain("eg-caption-collapsed");
+  });
+
+  it("uses a compact thumbnail treatment at normal feed-thumbnail size", () => {
+    const image = document.createElement("img");
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(0, 0, 225, 169));
+    document.body.append(image);
+    const renderer = new ProtectionRenderer();
+
+    protect(renderer, image);
+
+    const layer = renderer.debugLayerFor(image);
+    expect(layer?.classList).toContain("eg-compact");
+    expect(layer?.style.getPropertyValue("--eg-control-size")).toBe("30px");
+    expect(layer?.style.getPropertyValue("--eg-control-inset")).toBe("6px");
+    expect(layer?.style.getPropertyValue("--eg-frost-blur")).toBe("12px");
+    expect(layer?.querySelector(".eg-caption")?.classList).toContain("eg-caption-collapsed");
+    expect(layer?.querySelector(".eg-description-toggle")?.textContent).toBe("ALT");
+  });
+
+  it.each([
+    [320, 240, "36px", "18px"],
+    [800, 600, "44px", "25px"],
+  ])("scales controls and blur for a %sx%s media item", (width, height, control, blur) => {
+    const image = document.createElement("img");
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(0, 0, width, height));
+    document.body.append(image);
+    const renderer = new ProtectionRenderer();
+
+    protect(renderer, image);
+
+    const layer = renderer.debugLayerFor(image);
+    expect(layer?.style.getPropertyValue("--eg-control-size")).toBe(control);
+    expect(layer?.style.getPropertyValue("--eg-frost-blur")).toBe(blur);
+  });
+
+  it("shows only 50 description characters until the user expands it", () => {
+    const description = "A deliberately long description of an image that continues well beyond fifty characters.";
+    const image = document.createElement("img");
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(0, 0, 640, 360));
+    document.body.append(image);
+    const renderer = new ProtectionRenderer({
+      trustedActivation: (event) => event instanceof MouseEvent && event.type === "click",
+    });
+    protect(renderer, image, { description });
+    const layer = renderer.debugLayerFor(image);
+    const copy = layer?.querySelector(".eg-description");
+    const more = layer?.querySelector(".eg-description-more");
+
+    expect(copy?.textContent).toBe(`${Array.from(description).slice(0, 50).join("")}…`);
+    expect(more?.textContent).toBe("more");
+    more?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(copy?.textContent).toBe(description);
+    expect(more?.textContent).toBe("less");
+  });
+
+  it("opens settings from the Goggles brand row", () => {
+    const image = document.createElement("img");
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(0, 0, 640, 360));
+    document.body.append(image);
+    const onOpenSettings = vi.fn();
+    const renderer = new ProtectionRenderer({
+      trustedActivation: (event) => event instanceof MouseEvent && event.type === "click",
+    });
+    protect(renderer, image, { onOpenSettings });
+
+    renderer.debugLayerFor(image)?.querySelector(".eg-menu-brand")?.dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
+
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
 
   it("opens the goggles menu and closes it when the pointer leaves the control", () => {
@@ -402,7 +471,7 @@ describe("ProtectionRenderer", () => {
 
     expect(goggles?.getAttribute("aria-label")).toBe("Goggles site options");
     expect(layer?.querySelector(".eg-site-protect")?.textContent).toBe("Frost this site again");
-    expect(layer?.querySelector(".eg-menu-brand")?.textContent).toBe("GogglesChoose what you see.");
+    expect(layer?.querySelector(".eg-menu-brand")?.textContent).toBe("GogglesNo disturbing surprises.");
     layer?.querySelector(".eg-site-protect")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(onProtectSite).toHaveBeenCalledTimes(1);
 
@@ -547,7 +616,7 @@ describe("ProtectionRenderer", () => {
     expect(renderer.debugLayerFor(image)?.style.height).toBe("240px");
   });
 
-  it("uses the same compact goggles control and preserves the full description on its reveal surface", () => {
+  it("uses a collapsed ALT drawer and preserves the full description on its reveal surface", () => {
     const image = document.createElement("img");
     vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(0, 0, 159, 89));
     document.body.append(image);
@@ -556,7 +625,8 @@ describe("ProtectionRenderer", () => {
     protect(renderer, image);
 
     const layer = renderer.debugLayerFor(image);
-    expect(layer?.querySelector(".eg-description")).toBeNull();
+    expect(layer?.querySelector(".eg-caption")?.classList).toContain("eg-caption-collapsed");
+    expect(layer?.querySelector(".eg-description-toggle")?.textContent).toBe("ALT");
     expect(layer?.querySelector(".eg-reveal-surface")?.getAttribute("aria-label")).toContain("A black audio component");
     expect(layer?.querySelector(".eg-goggles")).not.toBeNull();
     expect(renderer.debugLayerFor(image)?.classList.contains("eg-compact")).toBe(true);
@@ -575,7 +645,8 @@ describe("ProtectionRenderer", () => {
     frames.flush();
 
     const layer = renderer.debugLayerFor(image);
-    expect(layer?.querySelector(".eg-description")).toBeNull();
+    expect(layer?.querySelector(".eg-caption")?.classList).toContain("eg-caption-collapsed");
+    expect(layer?.querySelector(".eg-description-toggle")?.textContent).toBe("ALT");
     expect(layer?.querySelector(".eg-reveal-surface")?.getAttribute("aria-label")).toContain("A black audio component");
     expect(layer?.querySelector(".eg-goggles")).not.toBeNull();
   });

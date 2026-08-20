@@ -17,6 +17,7 @@ export interface ProtectionOptions {
   onReveal: () => void;
   onRevealAll: () => void;
   onAllowSite: () => void;
+  onOpenSettings: () => void;
   onToggleDescriptions: () => void;
   descriptionsVisible: boolean;
   onReprotect: () => void;
@@ -24,6 +25,7 @@ export interface ProtectionOptions {
 
 export interface SiteAllowedControlOptions {
   onProtectSite: () => void;
+  onOpenSettings?: () => void;
 }
 
 export interface RendererEnvironment {
@@ -43,6 +45,7 @@ interface ProtectionRecord {
   onReveal: () => void;
   onRevealAll: () => void;
   onAllowSite: () => void;
+  onOpenSettings: () => void;
   onToggleDescriptions: () => void;
   onReprotect: () => void;
   descriptionVisible: boolean;
@@ -127,6 +130,7 @@ export class ProtectionRenderer {
       onReveal: options.onReveal,
       onRevealAll: options.onRevealAll,
       onAllowSite: options.onAllowSite,
+      onOpenSettings: options.onOpenSettings,
       onToggleDescriptions: options.onToggleDescriptions,
       onReprotect: options.onReprotect,
       descriptionVisible: options.descriptionsVisible,
@@ -186,7 +190,7 @@ export class ProtectionRenderer {
       event.stopPropagation();
       options.onProtectSite();
     });
-    menu.append(protectSite, this.createMenuBrand());
+    menu.append(protectSite, this.createMenuBrand(options.onOpenSettings ?? (() => undefined)));
     gogglesControl.append(goggles, menu);
     layer.append(gogglesControl);
     shadow.append(layer);
@@ -296,34 +300,47 @@ export class ProtectionRenderer {
     revealSurface.addEventListener("click", (event) => this.activate(record, event, "reveal"));
 
     const children: HTMLElement[] = [revealSurface];
-    if (!compact) {
-      const caption = this.document.createElement("div");
-      caption.className = "eg-caption";
-      const copy = this.document.createElement("span");
-      copy.id = "eg-description";
-      copy.className = "eg-description";
-      copy.textContent = description;
-      const toggle = this.createIconButton(
-        "eg-description-toggle",
-        "Hide description",
-        "chevron",
-      );
-      toggle.setAttribute("aria-expanded", "true");
-      toggle.setAttribute("aria-controls", copy.id);
-      toggle.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        record.descriptionVisible = caption.classList.contains("eg-caption-collapsed");
-        this.setCaptionCollapsed(caption, toggle, !record.descriptionVisible);
-      });
-      toggle.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") this.setCaptionCollapsed(caption, toggle, true);
-      });
-      copy.title = description;
+    const caption = this.document.createElement("div");
+    caption.className = "eg-caption";
+    const copy = this.document.createElement("span");
+    copy.id = "eg-description";
+    copy.className = "eg-description";
+    const characters = Array.from(description);
+    const preview = characters.length > 50 ? `${characters.slice(0, 50).join("")}…` : description;
+    copy.textContent = preview;
+    copy.title = description;
+    const more = characters.length > 50
+      ? this.createButton("more", "eg-description-more", "Show full description")
+      : null;
+    more?.addEventListener("click", (event) => {
+      if (!this.trustedActivation(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const expanded = more.textContent === "less";
+      copy.textContent = expanded ? preview : description;
+      copy.classList.toggle("eg-description-expanded", !expanded);
+      more.textContent = expanded ? "more" : "less";
+      more.setAttribute("aria-label", expanded ? "Show full description" : "Show shorter description");
+    });
+    const toggle = compact
+      ? this.createButton("ALT", "eg-description-toggle", "Show description")
+      : this.createIconButton("eg-description-toggle", "Hide description", "chevron");
+    toggle.setAttribute("aria-expanded", "true");
+    toggle.setAttribute("aria-controls", copy.id);
+    toggle.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      record.descriptionVisible = caption.classList.contains("eg-caption-collapsed");
       this.setCaptionCollapsed(caption, toggle, !record.descriptionVisible);
-      caption.append(copy, toggle);
-      children.push(caption);
-    }
+    });
+    toggle.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") this.setCaptionCollapsed(caption, toggle, true);
+    });
+    this.setCaptionCollapsed(caption, toggle, compact || !record.descriptionVisible);
+    caption.append(copy);
+    if (more) caption.append(more);
+    caption.append(toggle);
+    children.push(caption);
 
     const gogglesControl = this.document.createElement("div");
     gogglesControl.className = "eg-goggles-control";
@@ -349,11 +366,6 @@ export class ProtectionRenderer {
       "eg-allow-site",
       "Always show visual media on this site",
     );
-    const toggleDescriptions = this.createButton(
-      record.pageDescriptionsVisible ? "Hide descriptions on page" : "Show descriptions on page",
-      "eg-toggle-descriptions",
-      record.pageDescriptionsVisible ? "Hide descriptions on this page" : "Show descriptions on this page",
-    );
     reveal.addEventListener("click", (event) => this.activate(record, event, "reveal"));
     revealAll.addEventListener("click", (event) => this.activate(record, event, "reveal-all"));
     allowSite.addEventListener("click", (event) => {
@@ -362,13 +374,7 @@ export class ProtectionRenderer {
       event.stopPropagation();
       record.onAllowSite();
     });
-    toggleDescriptions.addEventListener("click", (event) => {
-      if (!this.trustedActivation(event) || record.removed) return;
-      event.preventDefault();
-      event.stopPropagation();
-      record.onToggleDescriptions();
-    });
-    menu.append(reveal, revealAll, toggleDescriptions, allowSite, this.createMenuBrand());
+    menu.append(reveal, revealAll, allowSite, this.createMenuBrand(record.onOpenSettings));
     gogglesControl.append(goggles, menu);
     goggles.addEventListener("click", (event) => {
       event.preventDefault();
@@ -437,14 +443,20 @@ export class ProtectionRenderer {
     this.closeSiteMenu();
   }
 
-  private createMenuBrand(): HTMLDivElement {
-    const brand = this.document.createElement("div");
+  private createMenuBrand(onOpenSettings: () => void): HTMLButtonElement {
+    const brand = this.createButton("", "eg-menu-brand", "Open Goggles settings");
     brand.className = "eg-menu-brand";
     const name = this.document.createElement("strong");
     name.textContent = "Goggles";
     const tagline = this.document.createElement("span");
-    tagline.textContent = "Choose what you see.";
+    tagline.textContent = "No disturbing surprises.";
     brand.append(name, tagline);
+    brand.addEventListener("click", (event) => {
+      if (!this.trustedActivation(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      onOpenSettings();
+    });
     return brand;
   }
 
@@ -464,32 +476,29 @@ export class ProtectionRenderer {
     const caption = record.layer.querySelector<HTMLElement>(".eg-caption");
     const toggle = record.layer.querySelector<HTMLButtonElement>(".eg-description-toggle");
     if (caption && toggle) this.setCaptionCollapsed(caption, toggle, !visible);
-    const pageToggle = record.layer.querySelector<HTMLButtonElement>(".eg-toggle-descriptions");
-    if (!pageToggle) return;
-    pageToggle.textContent = visible ? "Hide descriptions on page" : "Show descriptions on page";
-    pageToggle.setAttribute(
-      "aria-label",
-      visible ? "Hide descriptions on this page" : "Show descriptions on this page",
-    );
   }
 
   private isCompact(record: ProtectionRecord, currentBox?: DOMRect): boolean {
     const box = currentBox ?? record.candidate.element.getBoundingClientRect();
-    return box.width < 160 || box.height < 90;
+    return presentationFor(box).compact;
   }
 
   private updateRecord(record: ProtectionRecord, currentBox?: DOMRect): void {
     if (record.removed) return;
     const box = currentBox ?? record.candidate.element.getBoundingClientRect();
-    const compact = box.width < 160 || box.height < 90;
+    const presentation = presentationFor(box);
+    const { compact, controlSize, inset, blur } = presentation;
+    record.layer.style.setProperty("--eg-control-size", `${controlSize}px`);
+    record.layer.style.setProperty("--eg-control-inset", `${inset}px`);
+    record.layer.style.setProperty("--eg-frost-blur", `${blur}px`);
     if (record.revealed) {
-      const width = Math.min(44, box.width);
-      const height = Math.min(44, box.height);
+      const width = Math.min(controlSize, box.width);
+      const height = Math.min(controlSize, box.height);
       const visibleRight = Math.min(box.right, this.window.innerWidth);
       const visibleTop = Math.max(box.top, 0);
       Object.assign(record.layer.style, {
-        left: `${Math.max(box.left, visibleRight - width - 12)}px`,
-        top: `${Math.max(box.top, Math.min(box.bottom - height, visibleTop + 12))}px`,
+        left: `${Math.max(box.left, visibleRight - width - inset)}px`,
+        top: `${Math.max(box.top, Math.min(box.bottom - height, visibleTop + inset))}px`,
         width: `${width}px`,
         height: `${height}px`,
       });
@@ -504,10 +513,10 @@ export class ProtectionRenderer {
       width: `${box.width}px`,
       height: `${box.height}px`,
     });
-    record.layer.style.setProperty("--eg-control-right", `${Math.max(12, box.right - this.window.innerWidth + 12)}px`);
-    record.layer.style.setProperty("--eg-control-top", `${Math.max(12, 12 - box.top)}px`);
-    record.layer.style.setProperty("--eg-caption-left", `${Math.max(12, 12 - box.left)}px`);
-    record.layer.style.setProperty("--eg-caption-bottom", `${Math.max(12, box.bottom - this.window.innerHeight + 12)}px`);
+    record.layer.style.setProperty("--eg-control-right", `${Math.max(inset, box.right - this.window.innerWidth + inset)}px`);
+    record.layer.style.setProperty("--eg-control-top", `${Math.max(inset, inset - box.top)}px`);
+    record.layer.style.setProperty("--eg-caption-left", `${Math.max(inset, inset - box.left)}px`);
+    record.layer.style.setProperty("--eg-caption-bottom", `${Math.max(inset, box.bottom - this.window.innerHeight + inset)}px`);
     record.layer.classList.toggle("eg-compact", compact);
   }
 
@@ -572,6 +581,22 @@ function mediaLabel(kind: MediaKind): "image" | "video" {
 
 function layerCompact(layer: HTMLElement): boolean {
   return layer.classList.contains("eg-compact");
+}
+
+function presentationFor(box: Pick<DOMRect, "width" | "height">): {
+  compact: boolean;
+  controlSize: number;
+  inset: number;
+  blur: number;
+} {
+  const shortEdge = Math.min(box.width, box.height);
+  if (box.width < 280 || box.height < 180) {
+    return { compact: true, controlSize: 30, inset: 6, blur: 12 };
+  }
+  if (shortEdge < 360) {
+    return { compact: false, controlSize: 36, inset: 8, blur: 18 };
+  }
+  return { compact: false, controlSize: 44, inset: 12, blur: 25 };
 }
 
 function markProtected(candidate: MediaCandidate): void {

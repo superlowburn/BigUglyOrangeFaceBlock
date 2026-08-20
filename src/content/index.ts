@@ -76,6 +76,7 @@ function productionDependencies(): ContentBootstrapDependencies {
     createController: () => new ContentController({
       enableSiteControl: window === window.top,
       setSiteMode: (origin, mode) => store.set(origin, mode),
+      openSettings: () => chrome.runtime.sendMessage({ type: "options:open" }),
     }),
     sendMessage: (message) => chrome.runtime.sendMessage(message),
     watchPolicy: (origin, listener) => store.watch(origin, listener),

@@ -229,6 +229,71 @@ test("loads the project root as an unpacked extension after building", async () 
   }
 });
 
+test("scales thumbnail controls, frost, and description without losing alignment", async () => {
+  const extension = await launchExtension();
+  const { page } = extension;
+  try {
+    await page.goto(`${fixtureOrigin}/responsive-media.html`);
+    const target = page.locator("#target");
+    await expect(target).toHaveAttribute("data-eclipse-goggles-protected", "image");
+    const layer = layers(page).first();
+    await assertAligned(target, layer);
+    await expect(layer).toHaveClass(/eg-compact/u);
+    await expect(layer.locator(".eg-caption")).toHaveClass(/eg-caption-collapsed/u);
+    await expect(layer.locator(".eg-description-toggle")).toHaveText("ALT");
+
+    await expect.poll(() => layer.evaluate((node) => {
+      const goggles = node.querySelector(".eg-goggles")!;
+      return {
+        blur: getComputedStyle(node).backdropFilter,
+        control: Math.round(goggles.getBoundingClientRect().width),
+      };
+    })).toEqual({ blur: "blur(12px)", control: 30 });
+
+    await layer.locator(".eg-description-toggle").click();
+    await expect(layer.locator(".eg-description")).toHaveText(/…$/u);
+    await expect(layer.locator(".eg-description-more")).toHaveText("more");
+    await layer.locator(".eg-description-more").click();
+    await expect(layer.locator(".eg-description")).toHaveText(/for expansion$/u);
+
+    await target.evaluate((node) => {
+      Object.assign((node as HTMLElement).style, { width: "320px", height: "240px" });
+    });
+    await expect(layer).not.toHaveClass(/eg-compact/u);
+    await expect.poll(() => layer.evaluate((node) => ({
+      blur: getComputedStyle(node).backdropFilter,
+      control: Math.round(node.querySelector(".eg-goggles")!.getBoundingClientRect().width),
+    }))).toEqual({ blur: "blur(18px)", control: 36 });
+    await assertAligned(target, layer);
+  } finally {
+    await closeExtension(extension);
+  }
+});
+
+test("ships the real icon and first-run settings page", async () => {
+  const extension = await launchExtension();
+  try {
+    await expect.poll(() => extension.context.pages().map((page) => page.url()))
+      .toContainEqual(expect.stringContaining("/options/options.html"));
+    const optionsPage = extension.context.pages().find((page) => page.url().includes("/options/options.html"))!;
+    await expect(optionsPage.getByRole("heading", { name: "See it when you’re ready." })).toBeVisible();
+    await expect(optionsPage.getByRole("button", { name: "Click to reveal" })).toBeVisible();
+    const manifest = await extension.worker.evaluate(() => chrome.runtime.getManifest());
+    expect(manifest.icons).toEqual({
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png",
+    });
+    await optionsPage.getByRole("button", { name: /A gentler web for kids/u }).click();
+    await expect.poll(() => extension.worker.evaluate(async () =>
+      (await chrome.storage.local.get("default-site-mode"))["default-site-mode"],
+    )).toBe("strict");
+  } finally {
+    await closeExtension(extension);
+  }
+});
+
 test("privacy enforcement rejects an unapproved provider-format URL", async () => {
   const extension = await launchExtension({ providerFixtureUrls: videoProviderUrls });
   const unexpectedUrl = "https://www.youtube.com/embed/unapproved-fixture";
@@ -689,7 +754,7 @@ test("has accessible goggles navigation, specified caption contrast, and only ap
       name: "Always show visual media on this site",
       exact: true,
     });
-    const pageDescriptions = layer.locator(".eg-toggle-descriptions");
+    const settings = layer.getByRole("button", { name: "Open Goggles settings" });
     await page.locator("#before-media").focus();
     await page.keyboard.press("Tab");
     expect(await revealThis.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
@@ -709,23 +774,20 @@ test("has accessible goggles navigation, specified caption contrast, and only ap
     await page.keyboard.press("Tab");
     expect(await revealAll.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
     await page.keyboard.press("Tab");
-    expect(await pageDescriptions.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
-    await page.keyboard.press("Enter");
-    await expect(layer.locator(".eg-caption")).toHaveClass(/eg-caption-collapsed/u);
-    await expect(pageDescriptions).toHaveAttribute("aria-label", "Show descriptions on this page");
-    await page.keyboard.press("Tab");
     expect(await allowSite.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
+    await page.keyboard.press("Tab");
+    expect(await settings.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
     await page.keyboard.press("Tab");
     await expect(page.locator("#after-first-media")).toBeFocused();
     await page.keyboard.press("Shift+Tab");
-    expect(await allowSite.evaluate((node) => {
+    expect(await settings.evaluate((node) => {
       const root = node.getRootNode();
       return root instanceof ShadowRoot &&
         root.activeElement === node &&
         document.activeElement === root.host;
-    }), "Tab navigation did not return to Always show on this site").toBe(true);
+    }), "Tab navigation did not return to Goggles settings").toBe(true);
     const presentation = await layer.evaluate((node) => {
-      const focusedStyle = getComputedStyle(node.querySelector(".eg-allow-site")!);
+      const focusedStyle = getComputedStyle(node.querySelector(".eg-menu-brand")!);
       const captionStyle = getComputedStyle(node.querySelector(".eg-caption")!);
       return {
         outlineColor: focusedStyle.outlineColor,

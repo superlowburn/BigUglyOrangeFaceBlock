@@ -1,7 +1,7 @@
 import type { SiteMode } from "./media-types";
 
 type StorageArea = {
-  get(key: string): Promise<Record<string, unknown>>;
+  get(key: string | string[]): Promise<Record<string, unknown>>;
   set(items: Record<string, unknown>): Promise<void>;
 };
 
@@ -17,6 +17,7 @@ type StorageChangeEvent = {
 };
 
 const defaultMode: SiteMode = "protected";
+export const defaultPolicyKey = "default-site-mode";
 
 export function policyKey(origin: string): string {
   return `site-policy:${origin}`;
@@ -34,14 +35,19 @@ export class SitePolicyStore {
 
   async get(origin: string): Promise<SiteMode> {
     const key = policyKey(origin);
-    const values = await this.area.get(key);
+    const values = await this.area.get([key, defaultPolicyKey]);
     const value = values[key];
 
-    return isSiteMode(value) ? value : defaultMode;
+    if (isSiteMode(value)) return value;
+    return isSiteMode(values[defaultPolicyKey]) ? values[defaultPolicyKey] : defaultMode;
   }
 
   async set(origin: string, mode: SiteMode): Promise<void> {
     await this.area.set({ [policyKey(origin)]: mode });
+  }
+
+  async setDefault(mode: Exclude<SiteMode, "trusted">): Promise<void> {
+    await this.area.set({ [defaultPolicyKey]: mode });
   }
 
   watch(origin: string, listener: (mode: SiteMode) => void): () => void {

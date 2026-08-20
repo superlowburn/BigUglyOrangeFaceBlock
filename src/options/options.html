@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Goggles</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main id="app">
+      <header class="hero">
+        <div class="brand"><img src="../icons/icon128.png" alt=""><strong>Goggles</strong></div>
+        <div class="hero-copy">
+          <p class="eyebrow">NO DISTURBING SURPRISES</p>
+          <h1>See it when you’re ready.</h1>
+          <p>Goggles frosts images and videos so disturbing surprises, jump scares, and attention-grabbing AI media don’t hit you without warning.</p>
+        </div>
+        <div id="demo-media" class="demo-media">
+          <img src="demo-media.svg" alt="A calm lake beneath wooded hills">
+          <div class="demo-frost" aria-hidden="true"></div>
+          <button id="demo-reveal" type="button">Click to reveal</button>
+        </div>
+      </header>
+
+      <section aria-labelledby="default-heading">
+        <p class="section-number">01</p>
+        <div>
+          <h2 id="default-heading">Choose the starting protection</h2>
+          <p class="section-intro">Existing site choices stay as they are.</p>
+          <div class="mode-choices" role="group" aria-label="Default protection for new sites">
+            <button type="button" data-default-mode="protected" aria-pressed="false">
+              <strong>Personal</strong>
+              <span>Frost new sites. Reveal one item or trust a site whenever you choose.</span>
+            </button>
+            <button type="button" data-default-mode="strict" aria-pressed="false">
+              <strong>A gentler web for kids</strong>
+              <span>Start every new site in Strict mode. Individual reveal still works.</span>
+            </button>
+          </div>
+          <p class="privacy-note">The child-friendly setting adds a pause. It does not monitor browsing or prevent removal of the extension.</p>
+          <p id="save-status" class="save-status" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section aria-labelledby="rules-heading">
+        <p class="section-number">02</p>
+        <div>
+          <h2 id="rules-heading">Site rules</h2>
+          <p class="section-intro">Sites you have chosen to always show or always frost.</p>
+          <div id="site-rules" class="site-rules"></div>
+        </div>
+      </section>
+
+      <footer>
+        <strong>Private by design.</strong>
+        <span>Goggles works locally. It does not upload or analyze your images.</span>
+      </footer>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>
