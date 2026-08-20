@@ -46,23 +46,74 @@ export const protectionStyles = `
   bottom: var(--eg-caption-bottom, 12px);
   z-index: 2;
   max-width: calc(100% - 80px);
-  padding: 6px 9px;
+  display: flex;
+  align-items: stretch;
   overflow: hidden;
   color: #fff;
   background: rgba(31, 33, 35, 0.76);
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 7px;
   font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  pointer-events: none;
+  pointer-events: auto;
   backdrop-filter: blur(8px);
 }
 
 .eg-description {
   display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 0;
+  max-width: 420px;
+  max-height: 112px;
+  padding: 7px 9px;
+  overflow: auto;
+  opacity: 1;
+  white-space: normal;
+  transition: max-width 160ms ease, padding 160ms ease, opacity 120ms ease, transform 160ms ease;
+}
+
+.eg-description-toggle {
+  appearance: none;
+  display: grid;
+  flex: 0 0 44px;
+  width: 44px;
+  min-height: 44px;
+  padding: 10px;
+  place-items: center;
+  color: #fff;
+  border: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.16);
+  background: transparent;
+  cursor: pointer;
+}
+
+.eg-description-toggle:hover {
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.eg-description-toggle svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 160ms ease;
+}
+
+.eg-caption-collapsed .eg-description {
+  max-width: 0;
+  padding-right: 0;
+  padding-left: 0;
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.eg-caption-collapsed .eg-description-toggle {
+  border-left-color: transparent;
+}
+
+.eg-caption-collapsed .eg-description-toggle svg {
+  transform: rotate(180deg);
 }
 
 .eg-goggles-control {
@@ -117,7 +168,7 @@ export const protectionStyles = `
   right: 0;
   z-index: 4;
   display: grid;
-  width: 178px;
+  width: 204px;
   padding: 4px;
   color: #fff;
   background: rgba(31, 33, 35, 0.94);
@@ -150,17 +201,53 @@ export const protectionStyles = `
   font-weight: 500;
 }
 
+.eg-menu-brand {
+  display: grid;
+  gap: 1px;
+  padding: 9px 10px 8px;
+  color: #f5f6f7;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.eg-menu-brand strong {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.eg-menu-brand span {
+  color: #bdc1c5;
+}
+
 .eg-menu button:hover {
   background: rgba(255, 255, 255, 0.11);
 }
 
 .eg-reveal-surface:focus-visible,
 .eg-goggles:focus-visible,
+.eg-description-toggle:focus-visible,
 .eg-menu button:focus-visible,
 .eg-reprotect:focus-visible {
   outline: 2px solid #fff;
   outline-offset: 2px;
   box-shadow: 0 0 0 4px rgba(31, 33, 35, 0.72);
+}
+
+.eg-site-layer {
+  top: 12px;
+  right: 12px;
+  left: auto;
+  width: 44px;
+  height: 44px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.eg-site-layer .eg-goggles-control {
+  top: 0;
+  right: 0;
+  pointer-events: auto;
 }
 
 .eg-layer.eg-menu-open {

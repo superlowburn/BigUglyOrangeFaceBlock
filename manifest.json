@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "Goggles",
+  "description": "Safety goggles for visual media on the web.",
+  "version": "0.1.0",
+  "permissions": ["storage", "activeTab", "declarativeNetRequestWithHostAccess", "webNavigation"],
+  "host_permissions": [
+    "https://www.youtube.com/*",
+    "https://www.youtube-nocookie.com/*",
+    "https://player.vimeo.com/*"
+  ],
+  "declarative_net_request": {
+    "rule_resources": [{
+      "id": "provider_pre_request_gate",
+      "enabled": true,
+      "path": "public/provider-rules.json"
+    }]
+  },
+  "web_accessible_resources": [{
+    "resources": ["provider-blocked.html"],
+    "matches": ["<all_urls>"]
+  }],
+  "background": { "service_worker": "dist/service-worker.js" },
+  "action": { "default_popup": "dist/popup/popup.html" },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["dist/shadow-bridge.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true
+    },
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["dist/content.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true
+    }
+  ]
+}

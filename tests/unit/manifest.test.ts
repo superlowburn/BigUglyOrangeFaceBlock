@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("extension manifest", () => {
@@ -76,6 +76,20 @@ describe("extension manifest", () => {
           resourceTypes: ["sub_frame"],
         },
       },
+    ]);
+  });
+
+  it("can be loaded unpacked from the project root after building", () => {
+    expect(existsSync("manifest.json")).toBe(true);
+    expect(existsSync("provider-blocked.html")).toBe(true);
+    if (!existsSync("manifest.json")) return;
+
+    const rootManifest = JSON.parse(readFileSync("manifest.json", "utf8"));
+    expect(rootManifest.background.service_worker).toBe("dist/service-worker.js");
+    expect(rootManifest.action.default_popup).toBe("dist/popup/popup.html");
+    expect(rootManifest.content_scripts.map((script: { js: string[] }) => script.js)).toEqual([
+      ["dist/shadow-bridge.js"],
+      ["dist/content.js"],
     ]);
   });
 });

@@ -15,7 +15,12 @@ export interface ProtectionOptions {
   mode: SiteMode;
   onReveal: () => void;
   onRevealAll: () => void;
+  onAllowSite: () => void;
   onReprotect: () => void;
+}
+
+export interface SiteAllowedControlOptions {
+  onProtectSite: () => void;
 }
 
 export interface RendererEnvironment {
@@ -34,6 +39,7 @@ interface ProtectionRecord {
   layer: HTMLDivElement;
   onReveal: () => void;
   onRevealAll: () => void;
+  onAllowSite: () => void;
   onReprotect: () => void;
   mode: SiteMode;
   revealed: boolean;
@@ -42,6 +48,13 @@ interface ProtectionRecord {
   handle: ProtectionHandle;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
+}
+
+interface SiteControlRecord {
+  host: HTMLElement;
+  layer: HTMLDivElement;
+  goggles: HTMLButtonElement;
+  menu: HTMLElement;
 }
 
 export function isTrustedActivation(event: Event): boolean {
@@ -62,6 +75,7 @@ export class ProtectionRenderer {
   private readonly createStrictGuard: () => Pick<StrictRevealGuard, "watch">;
   private readonly records = new Map<HTMLElement, ProtectionRecord>();
   private readonly dirtyRecords = new Set<ProtectionRecord>();
+  private siteControl: SiteControlRecord | null = null;
   private frame: number | null = null;
   private listening = false;
 
@@ -105,6 +119,7 @@ export class ProtectionRenderer {
       layer,
       onReveal: options.onReveal,
       onRevealAll: options.onRevealAll,
+      onAllowSite: options.onAllowSite,
       onReprotect: options.onReprotect,
       mode: options.mode,
       revealed: false,
@@ -131,7 +146,79 @@ export class ProtectionRenderer {
     return this.records.get(element)?.layer ?? null;
   }
 
+  debugSiteLayer(): HTMLDivElement | null {
+    return this.siteControl?.layer ?? null;
+  }
+
+  showSiteAllowedControl(options: SiteAllowedControlOptions): void {
+    if (this.siteControl) return;
+
+    const { host, shadow } = this.createIsolatedHost();
+    const layer = this.document.createElement("div");
+    layer.className = "eg-layer eg-site-layer";
+    const gogglesControl = this.document.createElement("div");
+    gogglesControl.className = "eg-goggles-control";
+    const goggles = this.createIconButton("eg-goggles", "Goggles site options", "goggles");
+    goggles.setAttribute("aria-expanded", "false");
+    goggles.setAttribute("aria-controls", "eg-site-menu");
+    const menu = this.document.createElement("div");
+    menu.id = "eg-site-menu";
+    menu.className = "eg-menu";
+    menu.hidden = true;
+    const protectSite = this.createButton(
+      "Frost this site again",
+      "eg-site-protect",
+      "Frost images on this site again",
+    );
+    protectSite.addEventListener("click", (event) => {
+      if (!this.trustedActivation(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      options.onProtectSite();
+    });
+    menu.append(protectSite, this.createMenuBrand());
+    gogglesControl.append(goggles, menu);
+    layer.append(gogglesControl);
+    shadow.append(layer);
+    this.document.documentElement.append(host);
+
+    this.siteControl = { host, layer, goggles, menu };
+    goggles.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const open = menu.hidden === true;
+      this.closeAllMenus();
+      menu.hidden = !open;
+      goggles.setAttribute("aria-expanded", String(open));
+      layer.classList.toggle("eg-menu-open", open);
+    });
+    gogglesControl.addEventListener("mouseleave", () => this.closeSiteMenu());
+    layer.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || menu.hidden) return;
+      this.closeSiteMenu();
+      goggles.focus();
+    });
+    this.startListening();
+  }
+
+  hideSiteAllowedControl(): void {
+    if (!this.siteControl) return;
+    this.siteControl.host.remove();
+    this.siteControl = null;
+    this.stopListeningIfIdle();
+  }
+
   private createRoot(target: HTMLElement): { host: HTMLElement; shadow: ShadowRoot } {
+    const { host, shadow } = this.createIsolatedHost();
+    const anchor = target.closest(
+      "a[href], button, input, select, textarea, summary, [role=button], [role=link], [tabindex], [contenteditable]:not([contenteditable=false])",
+    ) ?? target.closest("picture") ?? target;
+    anchor.parentNode?.insertBefore(host, anchor.nextSibling);
+    if (!host.isConnected) this.document.documentElement.append(host);
+    return { host, shadow };
+  }
+
+  private createIsolatedHost(): { host: HTMLElement; shadow: ShadowRoot } {
     const host = this.document.createElement("div");
     host.setAttribute("data-eclipse-goggles-root", "");
     Object.assign(host.style, {
@@ -144,11 +231,6 @@ export class ProtectionRenderer {
     const style = this.document.createElement("style");
     style.textContent = protectionStyles;
     shadow.append(style);
-    const anchor = target.closest(
-      "a[href], button, input, select, textarea, summary, [role=button], [role=link], [tabindex], [contenteditable]:not([contenteditable=false])",
-    ) ?? target.closest("picture") ?? target;
-    anchor.parentNode?.insertBefore(host, anchor.nextSibling);
-    if (!host.isConnected) this.document.documentElement.append(host);
     return { host, shadow };
   }
 
@@ -208,9 +290,25 @@ export class ProtectionRenderer {
       const caption = this.document.createElement("div");
       caption.className = "eg-caption";
       const copy = this.document.createElement("span");
+      copy.id = "eg-description";
       copy.className = "eg-description";
       copy.textContent = description;
-      caption.append(copy);
+      const toggle = this.createIconButton(
+        "eg-description-toggle",
+        "Hide description",
+        "chevron",
+      );
+      toggle.setAttribute("aria-expanded", "true");
+      toggle.setAttribute("aria-controls", copy.id);
+      toggle.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.setCaptionCollapsed(caption, toggle, !caption.classList.contains("eg-caption-collapsed"));
+      });
+      toggle.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") this.setCaptionCollapsed(caption, toggle, true);
+      });
+      caption.append(copy, toggle);
       children.push(caption);
     }
 
@@ -233,9 +331,20 @@ export class ProtectionRenderer {
       "eg-reveal-all",
       "Reveal all protected media on this page",
     );
+    const allowSite = this.createButton(
+      "Always show on this site",
+      "eg-allow-site",
+      "Always show visual media on this site",
+    );
     reveal.addEventListener("click", (event) => this.activate(record, event, "reveal"));
     revealAll.addEventListener("click", (event) => this.activate(record, event, "reveal-all"));
-    menu.append(reveal, revealAll);
+    allowSite.addEventListener("click", (event) => {
+      if (!this.trustedActivation(event) || record.removed) return;
+      event.preventDefault();
+      event.stopPropagation();
+      record.onAllowSite();
+    });
+    menu.append(reveal, revealAll, allowSite, this.createMenuBrand());
     gogglesControl.append(goggles, menu);
     goggles.addEventListener("click", (event) => {
       event.preventDefault();
@@ -266,14 +375,20 @@ export class ProtectionRenderer {
     return button;
   }
 
-  private createIconButton(className: string, label: string, icon: "goggles" | "undo"): HTMLButtonElement {
+  private createIconButton(
+    className: string,
+    label: string,
+    icon: "goggles" | "undo" | "chevron",
+  ): HTMLButtonElement {
     const button = this.createButton("", className, label);
     const svg = this.document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("viewBox", "0 0 24 24");
     svg.setAttribute("aria-hidden", "true");
     svg.innerHTML = icon === "goggles"
       ? '<circle cx="7" cy="12" r="3.5"/><circle cx="17" cy="12" r="3.5"/><path d="M10.5 12h3M1.5 10.5l2 1M22.5 10.5l-2 1"/>'
-      : '<path d="M7 7H3V3M3.5 7A8 8 0 1 1 5 16"/>';
+      : icon === "undo"
+      ? '<path d="M7 7H3V3M3.5 7A8 8 0 1 1 5 16"/>'
+      : '<path d="m8 10 4 4 4-4"/>';
     button.append(svg);
     return button;
   }
@@ -286,8 +401,37 @@ export class ProtectionRenderer {
     record.layer.classList.remove("eg-menu-open");
   }
 
+  private closeSiteMenu(): void {
+    if (!this.siteControl) return;
+    this.siteControl.menu.hidden = true;
+    this.siteControl.goggles.setAttribute("aria-expanded", "false");
+    this.siteControl.layer.classList.remove("eg-menu-open");
+  }
+
   private closeAllMenus(): void {
     for (const record of this.records.values()) this.closeMenu(record);
+    this.closeSiteMenu();
+  }
+
+  private createMenuBrand(): HTMLDivElement {
+    const brand = this.document.createElement("div");
+    brand.className = "eg-menu-brand";
+    const name = this.document.createElement("strong");
+    name.textContent = "Goggles";
+    const tagline = this.document.createElement("span");
+    tagline.textContent = "Choose what you see.";
+    brand.append(name, tagline);
+    return brand;
+  }
+
+  private setCaptionCollapsed(
+    caption: HTMLElement,
+    toggle: HTMLButtonElement,
+    collapsed: boolean,
+  ): void {
+    caption.classList.toggle("eg-caption-collapsed", collapsed);
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+    toggle.setAttribute("aria-label", collapsed ? "Show description" : "Hide description");
   }
 
   private isCompact(record: ProtectionRecord, currentBox?: DOMRect): boolean {
@@ -369,7 +513,11 @@ export class ProtectionRenderer {
     record.candidate.element.removeEventListener("mouseleave", record.onMouseLeave);
     if (this.records.get(record.candidate.element) === record) this.records.delete(record.candidate.element);
 
-    if (this.records.size > 0) return;
+    this.stopListeningIfIdle();
+  }
+
+  private stopListeningIfIdle(): void {
+    if (this.records.size > 0 || this.siteControl) return;
     this.window.removeEventListener("scroll", this.scheduleAllUpdates, true);
     this.window.removeEventListener("resize", this.scheduleAllUpdates);
     this.document.removeEventListener("pointerdown", this.closeMenusForPointer, true);

@@ -73,7 +73,10 @@ function productionDependencies(): ContentBootstrapDependencies {
         return null;
       }
     },
-    createController: () => new ContentController(),
+    createController: () => new ContentController({
+      enableSiteControl: window === window.top,
+      setSiteMode: (origin, mode) => store.set(origin, mode),
+    }),
     sendMessage: (message) => chrome.runtime.sendMessage(message),
     watchPolicy: (origin, listener) => store.watch(origin, listener),
     addPageHideListener: (listener) => {

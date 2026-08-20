@@ -66,7 +66,9 @@ function rendererHarness() {
     items.push({ candidate, options, handle });
     return handle;
   });
-  return { protect, items };
+  const showSiteAllowedControl = vi.fn();
+  const hideSiteAllowedControl = vi.fn();
+  return { protect, items, showSiteAllowedControl, hideSiteAllowedControl };
 }
 
 function candidate(element: HTMLElement, kind: MediaKind): MediaCandidate {
@@ -223,6 +225,51 @@ describe("ContentController", () => {
 
     expect(harness.renderer.items.every(({ handle }) => handle.isRevealed())).toBe(true);
     expect(harness.nativeVideo.release).toHaveBeenCalledWith(second);
+  });
+
+  it("persists Trusted mode from a protected item's site action", () => {
+    const image = document.createElement("img");
+    document.body.append(image);
+    const setSiteMode = vi.fn();
+    const harness = controllerHarness(
+      new Map([[image, candidate(image, "image")]]),
+      { setSiteMode },
+    );
+    harness.controller.start({ origin: "https://news.example", mode: "protected" });
+    harness.observer.emit([image]);
+
+    const options = harness.renderer.items[0]?.options as ProtectionOptions & {
+      onAllowSite?: () => void;
+    };
+    expect(typeof options.onAllowSite).toBe("function");
+    options.onAllowSite?.();
+
+    expect(setSiteMode).toHaveBeenCalledWith("https://news.example", "trusted");
+  });
+
+  it("keeps one site control in Trusted mode and restores Protected on request", () => {
+    const setSiteMode = vi.fn();
+    const harness = controllerHarness(new Map(), { setSiteMode });
+
+    harness.controller.start({ origin: "https://news.example", mode: "trusted" });
+
+    expect(harness.renderer.showSiteAllowedControl).toHaveBeenCalledTimes(1);
+    const options = harness.renderer.showSiteAllowedControl.mock.calls[0]?.[0] as
+      | { onProtectSite: () => void }
+      | undefined;
+    options?.onProtectSite();
+    expect(setSiteMode).toHaveBeenCalledWith("https://news.example", "protected");
+
+    harness.controller.applyMode("protected");
+    expect(harness.renderer.hideSiteAllowedControl).toHaveBeenCalled();
+  });
+
+  it("does not render the top-level site control inside child frames", () => {
+    const harness = controllerHarness(new Map(), { enableSiteControl: false });
+
+    harness.controller.start({ origin: "https://news.example", mode: "trusted" });
+
+    expect(harness.renderer.showSiteAllowedControl).not.toHaveBeenCalled();
   });
 
   it("gates a provider before rendering and releases or regates only that frame", () => {

@@ -12,6 +12,7 @@ import { resolve } from "node:path";
 import { request as httpRequest } from "node:http";
 
 const extensionPath = resolve("dist");
+const projectRoot = resolve(".");
 const fixtureOrigin = "http://127.0.0.1:4173";
 const protectedSelector = "[data-eclipse-goggles-protected]";
 const youtubeFixtureUrl = "https://www.youtube.com/embed/eclipse-test?autoplay=1";
@@ -33,16 +34,18 @@ async function launchExtension(
     deviceScaleFactor?: number;
     providerFixtureUrls?: readonly string[];
     providerResponseDelayMs?: number;
+    unpackedPath?: string;
   } = {},
 ): Promise<LaunchedExtension> {
+  const unpackedPath = options.unpackedPath ?? extensionPath;
   const context = await chromium.launchPersistentContext("", {
     headless: false,
     viewport: acceptanceWindow,
     ...(options.deviceScaleFactor === undefined ? {} : { deviceScaleFactor: options.deviceScaleFactor }),
     args: [
       `--window-size=${acceptanceWindow.width},${acceptanceWindow.height}`,
-      `--disable-extensions-except=${extensionPath}`,
-      `--load-extension=${extensionPath}`,
+      `--disable-extensions-except=${unpackedPath}`,
+      `--load-extension=${unpackedPath}`,
     ],
   });
   const unexpectedRequests: string[] = [];
@@ -208,6 +211,19 @@ test("launches the loaded extension in the compact acceptance window", async () 
       width: acceptanceWindow.width,
       height: acceptanceWindow.height,
     });
+  } finally {
+    await closeExtension(extension);
+  }
+});
+
+test("loads the project root as an unpacked extension after building", async () => {
+  const extension = await launchExtension({ unpackedPath: projectRoot });
+  try {
+    await extension.page.goto(`${fixtureOrigin}/article.html`);
+    await expect(extension.page.locator("#first")).toHaveAttribute(
+      "data-eclipse-goggles-protected",
+      "image",
+    );
   } finally {
     await closeExtension(extension);
   }
@@ -391,7 +407,7 @@ test("protects media in existing and dynamically inserted open shadow roots", as
   }
 });
 
-test("protects dynamic and client-route media and removes every layer in Trusted mode", async () => {
+test("protects dynamic media and keeps a site control available in Trusted mode", async () => {
   const extension = await launchExtension();
   const { page, worker } = extension;
   try {
@@ -403,7 +419,15 @@ test("protects dynamic and client-route media and removes every layer in Trusted
 
     await setMode(worker, "trusted");
     await expect(page.locator(protectedSelector)).toHaveCount(0);
-    await expect(page.locator("[data-eclipse-goggles-root]")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Goggles site options" })).toHaveCount(1);
+
+    await page.getByRole("button", { name: "Goggles site options" }).click();
+    await page.getByRole("button", { name: "Frost images on this site again" }).click();
+    await expect(page.locator("#route-image")).toHaveAttribute(
+      "data-eclipse-goggles-protected",
+      "image",
+    );
+    await expect(page.getByRole("button", { name: "Goggles site options" })).toHaveCount(0);
   } finally {
     await closeExtension(extension);
   }
@@ -649,20 +673,32 @@ test("has accessible goggles navigation, specified caption contrast, and only ap
       name: "Reveal protected media: A moonlit lake beside dark hills",
       exact: true,
     })).toHaveCount(1);
-    await expect(layer.locator("button")).toHaveCount(4);
+    await expect(layer.locator("button")).toHaveCount(6);
     const revealThis = layer.getByRole("button", {
       name: "Reveal protected media: A moonlit lake beside dark hills",
       exact: true,
     });
     const goggles = layer.getByRole("button", { name: "Goggles reveal options" });
+    const descriptionToggle = layer.locator(".eg-description-toggle");
     const revealMenuItem = layer.locator(".eg-menu-reveal");
     const revealAll = layer.getByRole("button", {
       name: "Reveal all protected media on this page",
       exact: true,
     });
+    const allowSite = layer.getByRole("button", {
+      name: "Always show visual media on this site",
+      exact: true,
+    });
     await page.locator("#before-media").focus();
     await page.keyboard.press("Tab");
     expect(await revealThis.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
+    await page.keyboard.press("Tab");
+    expect(await descriptionToggle.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
+    await page.keyboard.press("Enter");
+    await expect(descriptionToggle).toHaveAttribute("aria-label", "Show description");
+    await expect(layer.locator(".eg-caption")).toHaveClass(/eg-caption-collapsed/u);
+    await page.keyboard.press("Enter");
+    await expect(descriptionToggle).toHaveAttribute("aria-label", "Hide description");
     await page.keyboard.press("Tab");
     expect(await goggles.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
     await page.keyboard.press("Enter");
@@ -672,16 +708,18 @@ test("has accessible goggles navigation, specified caption contrast, and only ap
     await page.keyboard.press("Tab");
     expect(await revealAll.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
     await page.keyboard.press("Tab");
+    expect(await allowSite.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
+    await page.keyboard.press("Tab");
     await expect(page.locator("#after-first-media")).toBeFocused();
     await page.keyboard.press("Shift+Tab");
-    expect(await revealAll.evaluate((node) => {
+    expect(await allowSite.evaluate((node) => {
       const root = node.getRootNode();
       return root instanceof ShadowRoot &&
         root.activeElement === node &&
         document.activeElement === root.host;
-    }), "Tab navigation did not return to Reveal all").toBe(true);
+    }), "Tab navigation did not return to Always show on this site").toBe(true);
     const presentation = await layer.evaluate((node) => {
-      const focusedStyle = getComputedStyle(node.querySelector(".eg-reveal-all")!);
+      const focusedStyle = getComputedStyle(node.querySelector(".eg-allow-site")!);
       const captionStyle = getComputedStyle(node.querySelector(".eg-caption")!);
       return {
         outlineColor: focusedStyle.outlineColor,

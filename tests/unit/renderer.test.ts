@@ -58,6 +58,7 @@ function protect(
     mode?: SiteMode;
     onReveal?: () => void;
     onRevealAll?: () => void;
+    onAllowSite?: () => void;
     onReprotect?: () => void;
   } = {},
 ) {
@@ -66,6 +67,7 @@ function protect(
     mode: options.mode ?? "protected",
     onReveal: options.onReveal ?? vi.fn(),
     onRevealAll: options.onRevealAll ?? vi.fn(),
+    onAllowSite: options.onAllowSite ?? vi.fn(),
     onReprotect: options.onReprotect ?? vi.fn(),
   };
   return renderer.protect(candidate(element, options.kind), protectionOptions);
@@ -127,8 +129,38 @@ describe("ProtectionRenderer", () => {
     expect(Array.from(layer?.querySelectorAll(".eg-menu button") ?? []).map((button) => button.textContent)).toEqual([
       "Reveal image",
       "Reveal all on page",
+      "Always show on this site",
     ]);
+    expect(layer?.querySelector(".eg-menu-brand")?.textContent).toBe("GogglesChoose what you see.");
     expect(layer?.querySelector(".eg-goggles svg")?.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("collapses and restores the description without revealing the media", () => {
+    const image = document.createElement("img");
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(20, 30, 640, 360));
+    document.body.append(image);
+    const onReveal = vi.fn();
+    const renderer = new ProtectionRenderer({
+      trustedActivation: (event) => event instanceof MouseEvent && event.type === "click",
+    });
+    const handle = protect(renderer, image, { onReveal });
+    const layer = renderer.debugLayerFor(image);
+    const caption = layer?.querySelector<HTMLElement>(".eg-caption");
+    const toggle = layer?.querySelector<HTMLButtonElement>(".eg-description-toggle");
+
+    expect(toggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(toggle?.getAttribute("aria-label")).toBe("Hide description");
+    toggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    expect(caption?.classList.contains("eg-caption-collapsed")).toBe(true);
+    expect(toggle?.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle?.getAttribute("aria-label")).toBe("Show description");
+    expect(handle.isRevealed()).toBe(false);
+    expect(onReveal).not.toHaveBeenCalled();
+
+    toggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(caption?.classList.contains("eg-caption-collapsed")).toBe(false);
+    expect(toggle?.getAttribute("aria-expanded")).toBe("true");
   });
 
   it("opens the goggles menu and closes it when the pointer leaves the control", () => {
@@ -295,6 +327,51 @@ describe("ProtectionRenderer", () => {
     );
 
     expect(onRevealAll).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers a persistent site allow action from every protected item", () => {
+    const image = document.createElement("img");
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(0, 0, 640, 360));
+    document.body.append(image);
+    const onAllowSite = vi.fn();
+    const renderer = new ProtectionRenderer({
+      trustedActivation: (event) => event instanceof MouseEvent && event.type === "click",
+    });
+    protect(renderer, image, { onAllowSite });
+
+    renderer.debugLayerFor(image)?.querySelector(".eg-allow-site")?.dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
+
+    expect(onAllowSite).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a site control available while the site is allowed", () => {
+    const onProtectSite = vi.fn();
+    const renderer = new ProtectionRenderer({
+      trustedActivation: (event) => event instanceof MouseEvent && event.type === "click",
+    });
+    const siteRenderer = renderer as ProtectionRenderer & {
+      showSiteAllowedControl?: (options: { onProtectSite: () => void }) => void;
+      hideSiteAllowedControl?: () => void;
+      debugSiteLayer?: () => HTMLElement | null;
+    };
+
+    expect(typeof siteRenderer.showSiteAllowedControl).toBe("function");
+    if (!siteRenderer.showSiteAllowedControl || !siteRenderer.debugSiteLayer) return;
+    siteRenderer.showSiteAllowedControl({ onProtectSite });
+    const layer = siteRenderer.debugSiteLayer();
+    const goggles = layer?.querySelector<HTMLButtonElement>(".eg-goggles");
+    goggles?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    expect(goggles?.getAttribute("aria-label")).toBe("Goggles site options");
+    expect(layer?.querySelector(".eg-site-protect")?.textContent).toBe("Frost this site again");
+    expect(layer?.querySelector(".eg-menu-brand")?.textContent).toBe("GogglesChoose what you see.");
+    layer?.querySelector(".eg-site-protect")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(onProtectSite).toHaveBeenCalledTimes(1);
+
+    siteRenderer.hideSiteAllowedControl?.();
+    expect(siteRenderer.debugSiteLayer()).toBeNull();
   });
 
   it("rejects page-dispatched synthetic pointer activation", () => {

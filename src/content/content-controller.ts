@@ -6,6 +6,7 @@ import {
   ProtectionRenderer,
   type ProtectionHandle,
   type ProtectionOptions,
+  type SiteAllowedControlOptions,
 } from "../protection/renderer";
 import type {
   MediaCandidate,
@@ -30,6 +31,8 @@ export interface DocumentObserverPort {
 
 interface RendererPort {
   protect(candidate: MediaCandidate, options: ProtectionOptions): ProtectionHandle;
+  showSiteAllowedControl?(options: SiteAllowedControlOptions): void;
+  hideSiteAllowedControl?(): void;
 }
 
 interface NativeVideoPort {
@@ -59,6 +62,8 @@ export interface ContentControllerDependencies {
   resolveDescription?: (candidate: MediaCandidate) => string;
   development?: boolean;
   logDiagnostic?: (tagName: string, message: string) => void;
+  setSiteMode?: (origin: string, mode: SiteMode) => void | Promise<void>;
+  enableSiteControl?: boolean;
 }
 
 interface ProtectionRecord {
@@ -77,9 +82,12 @@ export class ContentController {
   private readonly describe: (candidate: MediaCandidate) => string;
   private readonly development: boolean;
   private readonly logDiagnostic: (tagName: string, message: string) => void;
+  private readonly setSiteMode: (origin: string, mode: SiteMode) => void | Promise<void>;
+  private readonly enableSiteControl: boolean;
   private readonly byElement = new WeakMap<Element, ProtectionRecord>();
   private readonly records = new Set<ProtectionRecord>();
   private mode: SiteMode = "trusted";
+  private origin: string | null = null;
   private started = false;
   private observing = false;
 
@@ -104,12 +112,16 @@ export class ContentController {
     this.development = dependencies.development ?? isDevelopmentRuntime();
     this.logDiagnostic = dependencies.logDiagnostic ??
       ((tagName, message) => console.warn(`Goggles: ${tagName}: ${message}`));
+    this.setSiteMode = dependencies.setSiteMode ?? (() => undefined);
+    this.enableSiteControl = dependencies.enableSiteControl ?? true;
   }
 
   start(context: PolicyContext): void {
     if (this.started) this.stop();
     this.started = true;
+    this.origin = context.origin;
     this.mode = context.mode;
+    this.syncSiteControl();
     this.startObservation();
   }
 
@@ -118,6 +130,7 @@ export class ContentController {
 
     if (mode === "trusted") {
       this.mode = mode;
+      this.syncSiteControl();
       this.clearProtection();
       this.observer.scan(this.document);
       return;
@@ -125,12 +138,14 @@ export class ContentController {
 
     if (this.mode === "trusted") {
       this.mode = mode;
+      this.syncSiteControl();
       this.startObservation();
       this.observer.scan(this.document);
       return;
     }
 
     this.mode = mode;
+    this.syncSiteControl();
     for (const record of [...this.records]) {
       const { candidate } = record;
       try {
@@ -151,8 +166,10 @@ export class ContentController {
   stop(options: { restoreMedia?: boolean } = {}): void {
     this.stopObservation();
     this.clearProtection(options.restoreMedia ?? true);
+    this.renderer.hideSiteAllowedControl?.();
     if (options.restoreMedia === false) this.providerFrames.dispose?.();
     this.mode = "trusted";
+    this.origin = null;
     this.started = false;
   }
 
@@ -247,6 +264,7 @@ export class ContentController {
           });
         },
         onRevealAll: () => this.revealAll(),
+        onAllowSite: () => this.requestSiteMode("trusted"),
         onReprotect: () => this.enforceRecord(record),
       });
       record = { candidate, handle };
@@ -264,6 +282,21 @@ export class ContentController {
 
   private revealAll(): void {
     for (const record of [...this.records]) record.handle.reveal();
+  }
+
+  private requestSiteMode(mode: SiteMode): void {
+    if (!this.origin) return;
+    void Promise.resolve(this.setSiteMode(this.origin, mode)).catch(() => undefined);
+  }
+
+  private syncSiteControl(): void {
+    if (this.enableSiteControl && this.mode === "trusted") {
+      this.renderer.showSiteAllowedControl?.({
+        onProtectSite: () => this.requestSiteMode("protected"),
+      });
+      return;
+    }
+    this.renderer.hideSiteAllowedControl?.();
   }
 
   private prepareMedia(candidate: MediaCandidate): string | null | undefined {
