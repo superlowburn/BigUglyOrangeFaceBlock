@@ -144,8 +144,13 @@ function revealThisWithText(scope: Page | Frame, text: string): Locator {
   return layerWithText(scope, text).getByRole("button", { name: /Reveal protected media:/ });
 }
 
-function revealAllWithText(scope: Page | Frame, text: string): Locator {
-  return layerWithText(scope, text).getByRole("button", {
+async function revealAllWithText(scope: Page | Frame, text: string): Promise<Locator> {
+  const layer = layerWithText(scope, text);
+  const goggles = layer.getByRole("button", { name: "Goggles reveal options" });
+  await expect(goggles).toBeVisible();
+  await goggles.click({ timeout: 5_000 });
+  await expect(layer.locator(".eg-menu")).toBeVisible();
+  return layer.getByRole("button", {
     name: "Reveal all protected media on this page",
   });
 }
@@ -239,7 +244,9 @@ test("protects article images", async () => {
     await expect(page.locator("#first")).not.toHaveAttribute("data-eclipse-goggles-protected", "image");
     await expect(page.locator("#second")).toHaveAttribute("data-eclipse-goggles-protected", "image");
 
-    await revealAllWithText(page, "A red kite").focus();
+    await page.locator("#second").evaluate((node) => node.scrollIntoView({ block: "start" }));
+    await assertAligned(page.locator("#second"), layerWithText(page, "A red kite"));
+    await (await revealAllWithText(page, "A red kite")).focus();
     await page.keyboard.press("Enter");
     await expect(page.locator("#second")).not.toHaveAttribute("data-eclipse-goggles-protected", "image");
     await expect(page.locator(protectedSelector)).toHaveCount(0);
@@ -632,7 +639,7 @@ test("keeps overlays aligned at deviceScaleFactor 2", async () => {
   }
 });
 
-test("has visible keyboard focus, specified caption contrast, and only approved public attributes", async () => {
+test("has accessible goggles navigation, specified caption contrast, and only approved public attributes", async () => {
   const extension = await launchExtension();
   const { page } = extension;
   try {
@@ -642,11 +649,13 @@ test("has visible keyboard focus, specified caption contrast, and only approved 
       name: "Reveal protected media: A moonlit lake beside dark hills",
       exact: true,
     })).toHaveCount(1);
-    await expect(layer.locator("button")).toHaveCount(2);
+    await expect(layer.locator("button")).toHaveCount(4);
     const revealThis = layer.getByRole("button", {
       name: "Reveal protected media: A moonlit lake beside dark hills",
       exact: true,
     });
+    const goggles = layer.getByRole("button", { name: "Goggles reveal options" });
+    const revealMenuItem = layer.locator(".eg-menu-reveal");
     const revealAll = layer.getByRole("button", {
       name: "Reveal all protected media on this page",
       exact: true,
@@ -654,6 +663,12 @@ test("has visible keyboard focus, specified caption contrast, and only approved 
     await page.locator("#before-media").focus();
     await page.keyboard.press("Tab");
     expect(await revealThis.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
+    await page.keyboard.press("Tab");
+    expect(await goggles.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
+    await page.keyboard.press("Enter");
+    await expect(layer.locator(".eg-menu")).toBeVisible();
+    await page.keyboard.press("Tab");
+    expect(await revealMenuItem.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
     await page.keyboard.press("Tab");
     expect(await revealAll.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
     await page.keyboard.press("Tab");
@@ -673,13 +688,17 @@ test("has visible keyboard focus, specified caption contrast, and only approved 
         outlineWidth: focusedStyle.outlineWidth,
         color: captionStyle.color,
         background: captionStyle.backgroundColor,
+        gogglesWidth: Math.round(node.querySelector(".eg-goggles")!.getBoundingClientRect().width),
+        gogglesHeight: Math.round(node.querySelector(".eg-goggles")!.getBoundingClientRect().height),
       };
     });
     expect(presentation).toEqual({
-      outlineColor: "rgb(22, 100, 215)",
-      outlineWidth: "3px",
-      color: "rgb(38, 41, 44)",
-      background: "rgba(250, 250, 250, 0.94)",
+      outlineColor: "rgb(255, 255, 255)",
+      outlineWidth: "2px",
+      color: "rgb(255, 255, 255)",
+      background: "rgba(31, 33, 35, 0.76)",
+      gogglesWidth: 44,
+      gogglesHeight: 44,
     });
 
     const publicAttributes = await page.locator("*").evaluateAll((elements) =>

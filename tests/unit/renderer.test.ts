@@ -76,7 +76,7 @@ afterEach(() => {
 });
 
 describe("ProtectionRenderer", () => {
-  it("renders an isolated text-only frost layer over one media item", () => {
+  it("renders an isolated frost layer over one media item", () => {
     const image = document.createElement("img");
     vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(20, 30, 640, 360));
     document.body.append(image);
@@ -102,7 +102,7 @@ describe("ProtectionRenderer", () => {
     expect(layer?.style.height).toBe("360px");
   });
 
-  it("exposes Reveal this and Reveal all as native controls adjacent to the media", () => {
+  it("exposes a direct reveal surface and a closed goggles menu adjacent to the media", () => {
     const before = document.createElement("button");
     before.textContent = "Before";
     const image = document.createElement("img");
@@ -119,13 +119,89 @@ describe("ProtectionRenderer", () => {
     expect(host?.hasAttribute("data-eclipse-goggles-root")).toBe(true);
     expect(host?.nextElementSibling).toBe(after);
     expect(layer?.tagName).toBe("DIV");
-    expect(Array.from(layer?.querySelectorAll("button") ?? []).map((button) => button.textContent)).toEqual([
-      "Reveal this",
-      "Reveal all",
-    ]);
-    expect(layer?.querySelector(".eg-reveal-this")?.getAttribute("aria-label")).toBe(
+    expect(layer?.querySelector(".eg-reveal-surface")?.getAttribute("aria-label")).toBe(
       "Reveal protected media: A black audio component",
     );
+    expect(layer?.querySelector(".eg-goggles")?.getAttribute("aria-expanded")).toBe("false");
+    expect(layer?.querySelector(".eg-menu")?.hasAttribute("hidden")).toBe(true);
+    expect(Array.from(layer?.querySelectorAll(".eg-menu button") ?? []).map((button) => button.textContent)).toEqual([
+      "Reveal image",
+      "Reveal all on page",
+    ]);
+    expect(layer?.querySelector(".eg-goggles svg")?.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("opens the goggles menu and closes it when the pointer leaves the control", () => {
+    const image = document.createElement("img");
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(20, 30, 640, 360));
+    document.body.append(image);
+    const renderer = new ProtectionRenderer({
+      trustedActivation: (event) => event instanceof MouseEvent && event.type === "click",
+    });
+    protect(renderer, image);
+    const layer = renderer.debugLayerFor(image);
+    const goggles = layer?.querySelector<HTMLButtonElement>(".eg-goggles");
+    const menu = layer?.querySelector<HTMLElement>(".eg-menu");
+
+    goggles?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    expect(goggles?.getAttribute("aria-expanded")).toBe("true");
+    expect(menu?.hasAttribute("hidden")).toBe(false);
+    expect(layer?.classList.contains("eg-menu-open")).toBe(true);
+
+    layer?.querySelector(".eg-goggles-control")?.dispatchEvent(new MouseEvent("mouseleave"));
+
+    expect(goggles?.getAttribute("aria-expanded")).toBe("false");
+    expect(menu?.hasAttribute("hidden")).toBe(true);
+    expect(layer?.classList.contains("eg-menu-open")).toBe(false);
+  });
+
+  it("closes an open goggles menu when the user clicks elsewhere", () => {
+    const image = document.createElement("img");
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(20, 30, 640, 360));
+    document.body.append(image);
+    const renderer = new ProtectionRenderer();
+    protect(renderer, image);
+    const layer = renderer.debugLayerFor(image);
+    const goggles = layer?.querySelector<HTMLButtonElement>(".eg-goggles");
+    const menu = layer?.querySelector<HTMLElement>(".eg-menu");
+    goggles?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, composed: true }));
+
+    expect(goggles?.getAttribute("aria-expanded")).toBe("false");
+    expect(menu?.hasAttribute("hidden")).toBe(true);
+  });
+
+  it("closes an open goggles menu with Escape and returns focus to its trigger", () => {
+    const image = document.createElement("img");
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(20, 30, 640, 360));
+    document.body.append(image);
+    const renderer = new ProtectionRenderer();
+    protect(renderer, image);
+    const layer = renderer.debugLayerFor(image);
+    const goggles = layer?.querySelector<HTMLButtonElement>(".eg-goggles");
+    const menu = layer?.querySelector<HTMLElement>(".eg-menu");
+    goggles?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    menu?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+
+    expect(menu?.hasAttribute("hidden")).toBe(true);
+    expect(goggles?.getRootNode()).toBeInstanceOf(ShadowRoot);
+    expect((goggles?.getRootNode() as ShadowRoot).activeElement).toBe(goggles);
+  });
+
+  it("prevents pointer focus without blocking the later click activation", () => {
+    const image = document.createElement("img");
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(20, 30, 640, 360));
+    document.body.append(image);
+    const renderer = new ProtectionRenderer();
+    protect(renderer, image);
+    const goggles = renderer.debugLayerFor(image)?.querySelector<HTMLButtonElement>(".eg-goggles");
+
+    const uncancelled = goggles?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+
+    expect(uncancelled).toBe(false);
   });
 
   it("places a linked image control after the link and contains its activation", () => {
@@ -148,7 +224,7 @@ describe("ProtectionRenderer", () => {
 
     const host = link.nextElementSibling as HTMLElement | null;
     const activation = new MouseEvent("click", { bubbles: true, cancelable: true });
-    const uncancelled = renderer.debugLayerFor(image)?.querySelector(".eg-reveal-this")?.dispatchEvent(activation);
+    const uncancelled = renderer.debugLayerFor(image)?.querySelector(".eg-reveal-surface")?.dispatchEvent(activation);
 
     expect(host?.hasAttribute("data-eclipse-goggles-root")).toBe(true);
     expect(host?.nextElementSibling).toBe(after);
@@ -192,7 +268,7 @@ describe("ProtectionRenderer", () => {
     const firstHandle = protect(renderer, first, { onReveal: onFirstReveal });
     const secondHandle = protect(renderer, second, { onReveal: onSecondReveal });
 
-    renderer.debugLayerFor(first)?.querySelector(".eg-reveal-this")?.dispatchEvent(
+    renderer.debugLayerFor(first)?.querySelector(".eg-reveal-surface")?.dispatchEvent(
       new MouseEvent("click", { bubbles: true }),
     );
 
@@ -229,7 +305,7 @@ describe("ProtectionRenderer", () => {
     const renderer = new ProtectionRenderer();
     const handle = protect(renderer, image, { onReveal });
 
-    renderer.debugLayerFor(image)?.querySelector(".eg-reveal-this")?.dispatchEvent(
+    renderer.debugLayerFor(image)?.querySelector(".eg-reveal-surface")?.dispatchEvent(
       new MouseEvent("click", { bubbles: true }),
     );
 
@@ -253,11 +329,11 @@ describe("ProtectionRenderer", () => {
     const handle = protect(renderer, image, { onReveal });
     const layer = renderer.debugLayerFor(image);
 
-    layer?.querySelector(".eg-reveal-this")?.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+    layer?.querySelector(".eg-reveal-surface")?.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
     expect(onReveal).not.toHaveBeenCalled();
     expect(handle.isRevealed()).toBe(false);
 
-    layer?.querySelector(".eg-reveal-this")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    layer?.querySelector(".eg-reveal-surface")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(onReveal).toHaveBeenCalledTimes(1);
     expect(handle.isRevealed()).toBe(true);
   });
@@ -279,13 +355,36 @@ describe("ProtectionRenderer", () => {
     secondHandle.reveal();
 
     const protectAgain = renderer.debugLayerFor(first);
-    expect(protectAgain?.textContent).toBe("Protect again");
+    expect(protectAgain?.querySelector(".eg-reprotect")?.getAttribute("aria-label")).toBe("Protect again");
     protectAgain?.querySelector(".eg-reprotect")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
     expect(onFirstReprotect).toHaveBeenCalledTimes(1);
     expect(onSecondReprotect).not.toHaveBeenCalled();
     expect(firstHandle.isRevealed()).toBe(false);
     expect(secondHandle.isRevealed()).toBe(true);
+  });
+
+  it("keeps protected and revealed controls in the visible corner of oversized media", () => {
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(427);
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(240);
+    const image = document.createElement("img");
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(34, 0, 900, 506));
+    document.body.append(image);
+    const renderer = new ProtectionRenderer();
+    const handle = protect(renderer, image);
+    const layer = renderer.debugLayerFor(image);
+
+    expect(layer?.style.getPropertyValue("--eg-control-right")).toBe("519px");
+    expect(layer?.style.getPropertyValue("--eg-control-top")).toBe("12px");
+    expect(layer?.style.getPropertyValue("--eg-caption-left")).toBe("12px");
+    expect(layer?.style.getPropertyValue("--eg-caption-bottom")).toBe("278px");
+
+    handle.reveal();
+
+    expect(layer?.style.left).toBe("371px");
+    expect(layer?.style.top).toBe("12px");
+    expect(layer?.style.width).toBe("44px");
+    expect(layer?.style.height).toBe("44px");
   });
 
   it("deduplicates scroll and resize position work into one animation frame", () => {
@@ -335,7 +434,7 @@ describe("ProtectionRenderer", () => {
     expect(renderer.debugLayerFor(image)?.style.height).toBe("240px");
   });
 
-  it("uses compact copy and preserves the full description as its accessible label", () => {
+  it("uses the same compact goggles control and preserves the full description on its reveal surface", () => {
     const image = document.createElement("img");
     vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(0, 0, 159, 89));
     document.body.append(image);
@@ -343,12 +442,10 @@ describe("ProtectionRenderer", () => {
 
     protect(renderer, image);
 
-    const button = renderer.debugLayerFor(image);
-    expect(Array.from(button?.querySelectorAll("button") ?? []).map((control) => control.textContent)).toEqual([
-      "This",
-      "All",
-    ]);
-    expect(button?.querySelector(".eg-reveal-this")?.getAttribute("aria-label")).toContain("A black audio component");
+    const layer = renderer.debugLayerFor(image);
+    expect(layer?.querySelector(".eg-description")).toBeNull();
+    expect(layer?.querySelector(".eg-reveal-surface")?.getAttribute("aria-label")).toContain("A black audio component");
+    expect(layer?.querySelector(".eg-goggles")).not.toBeNull();
     expect(renderer.debugLayerFor(image)?.classList.contains("eg-compact")).toBe(true);
   });
 
@@ -364,12 +461,10 @@ describe("ProtectionRenderer", () => {
     handle.update();
     frames.flush();
 
-    const button = renderer.debugLayerFor(image);
-    expect(Array.from(button?.querySelectorAll("button") ?? []).map((control) => control.textContent)).toEqual([
-      "This",
-      "All",
-    ]);
-    expect(button?.querySelector(".eg-reveal-this")?.getAttribute("aria-label")).toContain("A black audio component");
+    const layer = renderer.debugLayerFor(image);
+    expect(layer?.querySelector(".eg-description")).toBeNull();
+    expect(layer?.querySelector(".eg-reveal-surface")?.getAttribute("aria-label")).toContain("A black audio component");
+    expect(layer?.querySelector(".eg-goggles")).not.toBeNull();
   });
 
   it("watches revealed strict items and disposes the watch when they are re-protected", () => {

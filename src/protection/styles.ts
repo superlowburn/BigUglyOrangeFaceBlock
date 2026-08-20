@@ -27,64 +27,144 @@ export const protectionStyles = `
   backdrop-filter: blur(25px);
   background: rgba(211, 211, 211, 0.10);
 }
+
+.eg-reveal-surface {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
 .eg-caption {
   position: absolute;
-  left: 12px;
-  width: min(calc(100% - 24px), calc(100vw - 48px));
-  bottom: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 13px 15px;
-  color: #26292c;
-  background: rgba(250, 250, 250, 0.94);
-  border-radius: 9px;
+  left: var(--eg-caption-left, 12px);
+  bottom: var(--eg-caption-bottom, 12px);
+  z-index: 2;
+  max-width: calc(100% - 80px);
+  padding: 6px 9px;
+  overflow: hidden;
+  color: #fff;
+  background: rgba(31, 33, 35, 0.76);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 7px;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  backdrop-filter: blur(8px);
 }
 
 .eg-description {
-  min-width: 0;
-  overflow-wrap: anywhere;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.eg-actions {
-  display: flex;
-  flex: none;
-  gap: 7px;
+.eg-goggles-control {
+  position: absolute;
+  top: var(--eg-control-top, 12px);
+  right: var(--eg-control-right, 12px);
+  z-index: 3;
 }
 
-.eg-control,
+.eg-goggles,
 .eg-reprotect {
   appearance: none;
-  flex: none;
-  border: 1px solid rgba(38, 41, 44, 0.32);
-  border-radius: 7px;
-  padding: 7px 10px;
-  color: #26292c;
-  background: #fff;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  padding: 10px;
+  place-items: center;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 50%;
+  background: rgba(31, 33, 35, 0.78);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.17);
+  backdrop-filter: blur(8px);
   cursor: pointer;
   font: inherit;
 }
 
-.eg-control:focus-visible,
+.eg-goggles:hover,
+.eg-reprotect:hover {
+  background: rgba(31, 33, 35, 0.90);
+}
+
+.eg-goggles svg,
+.eg-reprotect svg {
+  width: 24px;
+  height: 24px;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.eg-goggles svg {
+  transform: scale(1.12);
+}
+
+.eg-menu {
+  position: absolute;
+  top: 42px;
+  right: 0;
+  z-index: 4;
+  display: grid;
+  width: 178px;
+  padding: 4px;
+  color: #fff;
+  background: rgba(31, 33, 35, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px 0 10px 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(10px);
+}
+
+.eg-menu[hidden] {
+  display: none;
+}
+
+.eg-menu button {
+  min-height: 44px;
+  padding: 9px 10px;
+  color: #fff;
+  border: 0;
+  border-radius: 7px;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+  font: 600 14px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.eg-menu button + button {
+  color: #d8dadd;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0 0 7px 7px;
+  font-weight: 500;
+}
+
+.eg-menu button:hover {
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.eg-reveal-surface:focus-visible,
+.eg-goggles:focus-visible,
+.eg-menu button:focus-visible,
 .eg-reprotect:focus-visible {
-  outline: 3px solid #1664d7;
+  outline: 2px solid #fff;
   outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(31, 33, 35, 0.72);
 }
 
-.eg-compact .eg-caption {
-  inset: 0;
-  justify-content: center;
-  padding: 6px;
-  background: rgba(250, 250, 250, 0.94);
-}
-
-.eg-compact .eg-actions {
-  gap: 5px;
-}
-
-.eg-compact .eg-control {
-  padding: 5px 7px;
+.eg-layer.eg-menu-open {
+  overflow: visible;
 }
 
 .eg-layer.eg-revealed {
@@ -94,16 +174,16 @@ export const protectionStyles = `
 }
 
 .eg-reprotect {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 120ms ease;
+  width: 100%;
+  height: 100%;
+  opacity: 0.78;
+  pointer-events: auto;
+  transition: opacity 120ms ease, background-color 120ms ease;
 }
 
 .eg-target-hover .eg-reprotect,
-.eg-reprotect:focus,
 .eg-reprotect:focus-visible {
   opacity: 1;
-  pointer-events: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {

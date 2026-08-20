@@ -65,6 +65,12 @@ export class ProtectionRenderer {
   private frame: number | null = null;
   private listening = false;
 
+  private closeMenusForPointer = (event: PointerEvent): void => {
+    const insideGoggles = event.composedPath().some((node) =>
+      node instanceof Element && node.classList.contains("eg-goggles-control"));
+    if (!insideGoggles) this.closeAllMenus();
+  };
+
   constructor(environment: RendererEnvironment = {}) {
     this.document = environment.document ?? document;
     this.window = environment.window ?? window;
@@ -159,7 +165,7 @@ export class ProtectionRenderer {
     if (record.removed || record.revealed) return;
     record.revealed = true;
     record.layer.className = "eg-layer eg-revealed";
-    const reprotect = this.createButton("Protect again", "eg-reprotect", "Protect again");
+    const reprotect = this.createIconButton("eg-reprotect", "Protect again", "undo");
     reprotect.addEventListener("click", (event) => this.activate(record, event, "reprotect"));
     record.layer.replaceChildren(reprotect);
     record.candidate.element.removeAttribute("data-eclipse-goggles-protected");
@@ -187,36 +193,67 @@ export class ProtectionRenderer {
     const { layer, description } = record;
     layer.className = "eg-layer eg-frost";
     layer.removeAttribute("aria-label");
-
-    const caption = this.document.createElement("div");
-    caption.className = "eg-caption";
     const compact = this.isCompact(record, box);
     layer.classList.toggle("eg-compact", compact);
 
+    const revealSurface = this.createButton(
+      "",
+      "eg-reveal-surface",
+      `Reveal protected media: ${description}`,
+    );
+    revealSurface.addEventListener("click", (event) => this.activate(record, event, "reveal"));
+
+    const children: HTMLElement[] = [revealSurface];
     if (!compact) {
+      const caption = this.document.createElement("div");
+      caption.className = "eg-caption";
       const copy = this.document.createElement("span");
       copy.className = "eg-description";
       copy.textContent = description;
       caption.append(copy);
+      children.push(caption);
     }
 
-    const actions = this.document.createElement("span");
-    actions.className = "eg-actions";
+    const gogglesControl = this.document.createElement("div");
+    gogglesControl.className = "eg-goggles-control";
+    const goggles = this.createIconButton("eg-goggles", "Goggles reveal options", "goggles");
+    goggles.setAttribute("aria-expanded", "false");
+    goggles.setAttribute("aria-controls", "eg-reveal-menu");
+    const menu = this.document.createElement("div");
+    menu.id = "eg-reveal-menu";
+    menu.className = "eg-menu";
+    menu.hidden = true;
     const reveal = this.createButton(
-      compact ? "This" : "Reveal this",
-      "eg-control eg-reveal-this",
+      "Reveal image",
+      "eg-menu-reveal",
       `Reveal protected media: ${description}`,
     );
     const revealAll = this.createButton(
-      compact ? "All" : "Reveal all",
-      "eg-control eg-reveal-all",
+      "Reveal all on page",
+      "eg-reveal-all",
       "Reveal all protected media on this page",
     );
     reveal.addEventListener("click", (event) => this.activate(record, event, "reveal"));
     revealAll.addEventListener("click", (event) => this.activate(record, event, "reveal-all"));
-    actions.append(reveal, revealAll);
-    caption.append(actions);
-    layer.replaceChildren(caption);
+    menu.append(reveal, revealAll);
+    gogglesControl.append(goggles, menu);
+    goggles.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const open = menu.hidden === true;
+      this.closeAllMenus();
+      menu.hidden = !open;
+      goggles.setAttribute("aria-expanded", String(open));
+      layer.classList.toggle("eg-menu-open", open);
+    });
+    gogglesControl.addEventListener("mouseleave", () => this.closeMenu(record));
+    layer.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || menu.hidden) return;
+      this.closeMenu(record);
+      goggles.focus();
+    });
+    children.push(gogglesControl);
+    layer.replaceChildren(...children);
   }
 
   private createButton(text: string, className: string, label: string): HTMLButtonElement {
@@ -225,7 +262,32 @@ export class ProtectionRenderer {
     button.className = className;
     button.textContent = text;
     button.setAttribute("aria-label", label);
+    button.addEventListener("mousedown", (event) => event.preventDefault());
     return button;
+  }
+
+  private createIconButton(className: string, label: string, icon: "goggles" | "undo"): HTMLButtonElement {
+    const button = this.createButton("", className, label);
+    const svg = this.document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("aria-hidden", "true");
+    svg.innerHTML = icon === "goggles"
+      ? '<circle cx="7" cy="12" r="3.5"/><circle cx="17" cy="12" r="3.5"/><path d="M10.5 12h3M1.5 10.5l2 1M22.5 10.5l-2 1"/>'
+      : '<path d="M7 7H3V3M3.5 7A8 8 0 1 1 5 16"/>';
+    button.append(svg);
+    return button;
+  }
+
+  private closeMenu(record: ProtectionRecord): void {
+    const menu = record.layer.querySelector<HTMLElement>(".eg-menu");
+    const goggles = record.layer.querySelector<HTMLElement>(".eg-goggles");
+    if (menu) menu.hidden = true;
+    goggles?.setAttribute("aria-expanded", "false");
+    record.layer.classList.remove("eg-menu-open");
+  }
+
+  private closeAllMenus(): void {
+    for (const record of this.records.values()) this.closeMenu(record);
   }
 
   private isCompact(record: ProtectionRecord, currentBox?: DOMRect): boolean {
@@ -238,11 +300,13 @@ export class ProtectionRenderer {
     const box = currentBox ?? record.candidate.element.getBoundingClientRect();
     const compact = box.width < 160 || box.height < 90;
     if (record.revealed) {
-      const width = Math.min(140, box.width);
+      const width = Math.min(44, box.width);
       const height = Math.min(44, box.height);
+      const visibleRight = Math.min(box.right, this.window.innerWidth);
+      const visibleTop = Math.max(box.top, 0);
       Object.assign(record.layer.style, {
-        left: `${box.right - width}px`,
-        top: `${box.bottom - height}px`,
+        left: `${Math.max(box.left, visibleRight - width - 12)}px`,
+        top: `${Math.max(box.top, Math.min(box.bottom - height, visibleTop + 12))}px`,
         width: `${width}px`,
         height: `${height}px`,
       });
@@ -257,6 +321,10 @@ export class ProtectionRenderer {
       width: `${box.width}px`,
       height: `${box.height}px`,
     });
+    record.layer.style.setProperty("--eg-control-right", `${Math.max(12, box.right - this.window.innerWidth + 12)}px`);
+    record.layer.style.setProperty("--eg-control-top", `${Math.max(12, 12 - box.top)}px`);
+    record.layer.style.setProperty("--eg-caption-left", `${Math.max(12, 12 - box.left)}px`);
+    record.layer.style.setProperty("--eg-caption-bottom", `${Math.max(12, box.bottom - this.window.innerHeight + 12)}px`);
     record.layer.classList.toggle("eg-compact", compact);
   }
 
@@ -285,6 +353,7 @@ export class ProtectionRenderer {
     if (this.listening) return;
     this.window.addEventListener("scroll", this.scheduleAllUpdates, true);
     this.window.addEventListener("resize", this.scheduleAllUpdates);
+    this.document.addEventListener("pointerdown", this.closeMenusForPointer, true);
     this.listening = true;
   }
 
@@ -303,6 +372,7 @@ export class ProtectionRenderer {
     if (this.records.size > 0) return;
     this.window.removeEventListener("scroll", this.scheduleAllUpdates, true);
     this.window.removeEventListener("resize", this.scheduleAllUpdates);
+    this.document.removeEventListener("pointerdown", this.closeMenusForPointer, true);
     this.listening = false;
     if (this.frame !== null) this.cancelFrame(this.frame);
     this.frame = null;
