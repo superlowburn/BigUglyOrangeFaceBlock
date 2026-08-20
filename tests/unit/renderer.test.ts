@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   isTrustedActivation,
   ProtectionRenderer,
+  type ProtectionHandle,
   type RendererEnvironment,
 } from "../../src/protection/renderer";
 import type { MediaCandidate, MediaKind, SiteMode } from "../../src/shared/media-types";
@@ -59,6 +60,8 @@ function protect(
     onReveal?: () => void;
     onRevealAll?: () => void;
     onAllowSite?: () => void;
+    onToggleDescriptions?: () => void;
+    descriptionsVisible?: boolean;
     onReprotect?: () => void;
   } = {},
 ) {
@@ -68,6 +71,8 @@ function protect(
     onReveal: options.onReveal ?? vi.fn(),
     onRevealAll: options.onRevealAll ?? vi.fn(),
     onAllowSite: options.onAllowSite ?? vi.fn(),
+    onToggleDescriptions: options.onToggleDescriptions ?? vi.fn(),
+    descriptionsVisible: options.descriptionsVisible ?? true,
     onReprotect: options.onReprotect ?? vi.fn(),
   };
   return renderer.protect(candidate(element, options.kind), protectionOptions);
@@ -129,6 +134,7 @@ describe("ProtectionRenderer", () => {
     expect(Array.from(layer?.querySelectorAll(".eg-menu button") ?? []).map((button) => button.textContent)).toEqual([
       "Reveal image",
       "Reveal all on page",
+      "Hide descriptions on page",
       "Always show on this site",
     ]);
     expect(layer?.querySelector(".eg-menu-brand")?.textContent).toBe("GogglesChoose what you see.");
@@ -161,6 +167,36 @@ describe("ProtectionRenderer", () => {
     toggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(caption?.classList.contains("eg-caption-collapsed")).toBe(false);
     expect(toggle?.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("applies a page description choice while preserving individual reopening", () => {
+    const image = document.createElement("img");
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(20, 30, 640, 360));
+    document.body.append(image);
+    const onToggleDescriptions = vi.fn();
+    const renderer = new ProtectionRenderer({
+      trustedActivation: (event) => event instanceof MouseEvent && event.type === "click",
+    });
+    const handle = protect(renderer, image, { onToggleDescriptions });
+    const pageDescriptions = renderer.debugLayerFor(image)?.querySelector(".eg-toggle-descriptions");
+
+    pageDescriptions?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(onToggleDescriptions).toHaveBeenCalledTimes(1);
+
+    const descriptionHandle = handle as ProtectionHandle & {
+      setDescriptionVisible?: (visible: boolean) => void;
+    };
+    expect(typeof descriptionHandle.setDescriptionVisible).toBe("function");
+    descriptionHandle.setDescriptionVisible?.(false);
+    expect(renderer.debugLayerFor(image)?.querySelector(".eg-caption")?.classList)
+      .toContain("eg-caption-collapsed");
+    expect(pageDescriptions?.textContent).toBe("Show descriptions on page");
+
+    renderer.debugLayerFor(image)?.querySelector(".eg-description-toggle")?.dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
+    expect(renderer.debugLayerFor(image)?.querySelector(".eg-caption")?.classList)
+      .not.toContain("eg-caption-collapsed");
   });
 
   it("opens the goggles menu and closes it when the pointer leaves the control", () => {

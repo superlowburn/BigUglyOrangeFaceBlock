@@ -7,6 +7,7 @@ export interface ProtectionHandle {
   reprotect(): void;
   remove(): void;
   update(): void;
+  setDescriptionVisible(visible: boolean): void;
   isRevealed(): boolean;
 }
 
@@ -16,6 +17,8 @@ export interface ProtectionOptions {
   onReveal: () => void;
   onRevealAll: () => void;
   onAllowSite: () => void;
+  onToggleDescriptions: () => void;
+  descriptionsVisible: boolean;
   onReprotect: () => void;
 }
 
@@ -40,7 +43,10 @@ interface ProtectionRecord {
   onReveal: () => void;
   onRevealAll: () => void;
   onAllowSite: () => void;
+  onToggleDescriptions: () => void;
   onReprotect: () => void;
+  descriptionVisible: boolean;
+  pageDescriptionsVisible: boolean;
   mode: SiteMode;
   revealed: boolean;
   removed: boolean;
@@ -109,6 +115,7 @@ export class ProtectionRenderer {
       reprotect: () => this.reprotect(record),
       remove: () => this.remove(record),
       update: () => this.scheduleRecordUpdate(record),
+      setDescriptionVisible: (visible) => this.setRecordDescriptionVisible(record, visible),
       isRevealed: () => record.revealed,
     };
 
@@ -120,7 +127,10 @@ export class ProtectionRenderer {
       onReveal: options.onReveal,
       onRevealAll: options.onRevealAll,
       onAllowSite: options.onAllowSite,
+      onToggleDescriptions: options.onToggleDescriptions,
       onReprotect: options.onReprotect,
+      descriptionVisible: options.descriptionsVisible,
+      pageDescriptionsVisible: options.descriptionsVisible,
       mode: options.mode,
       revealed: false,
       removed: false,
@@ -303,11 +313,14 @@ export class ProtectionRenderer {
       toggle.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        this.setCaptionCollapsed(caption, toggle, !caption.classList.contains("eg-caption-collapsed"));
+        record.descriptionVisible = caption.classList.contains("eg-caption-collapsed");
+        this.setCaptionCollapsed(caption, toggle, !record.descriptionVisible);
       });
       toggle.addEventListener("keydown", (event) => {
         if (event.key === "Escape") this.setCaptionCollapsed(caption, toggle, true);
       });
+      copy.title = description;
+      this.setCaptionCollapsed(caption, toggle, !record.descriptionVisible);
       caption.append(copy, toggle);
       children.push(caption);
     }
@@ -336,6 +349,11 @@ export class ProtectionRenderer {
       "eg-allow-site",
       "Always show visual media on this site",
     );
+    const toggleDescriptions = this.createButton(
+      record.pageDescriptionsVisible ? "Hide descriptions on page" : "Show descriptions on page",
+      "eg-toggle-descriptions",
+      record.pageDescriptionsVisible ? "Hide descriptions on this page" : "Show descriptions on this page",
+    );
     reveal.addEventListener("click", (event) => this.activate(record, event, "reveal"));
     revealAll.addEventListener("click", (event) => this.activate(record, event, "reveal-all"));
     allowSite.addEventListener("click", (event) => {
@@ -344,7 +362,13 @@ export class ProtectionRenderer {
       event.stopPropagation();
       record.onAllowSite();
     });
-    menu.append(reveal, revealAll, allowSite, this.createMenuBrand());
+    toggleDescriptions.addEventListener("click", (event) => {
+      if (!this.trustedActivation(event) || record.removed) return;
+      event.preventDefault();
+      event.stopPropagation();
+      record.onToggleDescriptions();
+    });
+    menu.append(reveal, revealAll, toggleDescriptions, allowSite, this.createMenuBrand());
     gogglesControl.append(goggles, menu);
     goggles.addEventListener("click", (event) => {
       event.preventDefault();
@@ -432,6 +456,21 @@ export class ProtectionRenderer {
     caption.classList.toggle("eg-caption-collapsed", collapsed);
     toggle.setAttribute("aria-expanded", String(!collapsed));
     toggle.setAttribute("aria-label", collapsed ? "Show description" : "Hide description");
+  }
+
+  private setRecordDescriptionVisible(record: ProtectionRecord, visible: boolean): void {
+    record.descriptionVisible = visible;
+    record.pageDescriptionsVisible = visible;
+    const caption = record.layer.querySelector<HTMLElement>(".eg-caption");
+    const toggle = record.layer.querySelector<HTMLButtonElement>(".eg-description-toggle");
+    if (caption && toggle) this.setCaptionCollapsed(caption, toggle, !visible);
+    const pageToggle = record.layer.querySelector<HTMLButtonElement>(".eg-toggle-descriptions");
+    if (!pageToggle) return;
+    pageToggle.textContent = visible ? "Hide descriptions on page" : "Show descriptions on page";
+    pageToggle.setAttribute(
+      "aria-label",
+      visible ? "Hide descriptions on this page" : "Show descriptions on this page",
+    );
   }
 
   private isCompact(record: ProtectionRecord, currentBox?: DOMRect): boolean {

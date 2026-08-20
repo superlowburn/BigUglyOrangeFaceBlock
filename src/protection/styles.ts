@@ -59,14 +59,15 @@ export const protectionStyles = `
 }
 
 .eg-description {
-  display: block;
+  display: -webkit-box;
   min-width: 0;
   max-width: 420px;
-  max-height: 112px;
   padding: 7px 9px;
-  overflow: auto;
+  overflow: hidden;
   opacity: 1;
-  white-space: normal;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   transition: max-width 160ms ease, padding 160ms ease, opacity 120ms ease, transform 160ms ease;
 }
 

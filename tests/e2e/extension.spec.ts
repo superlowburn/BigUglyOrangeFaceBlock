@@ -673,7 +673,7 @@ test("has accessible goggles navigation, specified caption contrast, and only ap
       name: "Reveal protected media: A moonlit lake beside dark hills",
       exact: true,
     })).toHaveCount(1);
-    await expect(layer.locator("button")).toHaveCount(6);
+    await expect(layer.locator("button")).toHaveCount(7);
     const revealThis = layer.getByRole("button", {
       name: "Reveal protected media: A moonlit lake beside dark hills",
       exact: true,
@@ -689,6 +689,7 @@ test("has accessible goggles navigation, specified caption contrast, and only ap
       name: "Always show visual media on this site",
       exact: true,
     });
+    const pageDescriptions = layer.locator(".eg-toggle-descriptions");
     await page.locator("#before-media").focus();
     await page.keyboard.press("Tab");
     expect(await revealThis.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
@@ -707,6 +708,11 @@ test("has accessible goggles navigation, specified caption contrast, and only ap
     expect(await revealMenuItem.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
     await page.keyboard.press("Tab");
     expect(await revealAll.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
+    await page.keyboard.press("Tab");
+    expect(await pageDescriptions.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
+    await page.keyboard.press("Enter");
+    await expect(layer.locator(".eg-caption")).toHaveClass(/eg-caption-collapsed/u);
+    await expect(pageDescriptions).toHaveAttribute("aria-label", "Show descriptions on this page");
     await page.keyboard.press("Tab");
     expect(await allowSite.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
     await page.keyboard.press("Tab");

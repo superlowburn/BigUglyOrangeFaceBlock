@@ -88,6 +88,7 @@ export class ContentController {
   private readonly records = new Set<ProtectionRecord>();
   private mode: SiteMode = "trusted";
   private origin: string | null = null;
+  private descriptionsVisible = true;
   private started = false;
   private observing = false;
 
@@ -121,6 +122,7 @@ export class ContentController {
     this.started = true;
     this.origin = context.origin;
     this.mode = context.mode;
+    this.descriptionsVisible = true;
     this.syncSiteControl();
     this.startObservation();
   }
@@ -265,6 +267,8 @@ export class ContentController {
         },
         onRevealAll: () => this.revealAll(),
         onAllowSite: () => this.requestSiteMode("trusted"),
+        onToggleDescriptions: () => this.toggleDescriptions(),
+        descriptionsVisible: this.descriptionsVisible,
         onReprotect: () => this.enforceRecord(record),
       });
       record = { candidate, handle };
@@ -282,6 +286,13 @@ export class ContentController {
 
   private revealAll(): void {
     for (const record of [...this.records]) record.handle.reveal();
+  }
+
+  private toggleDescriptions(): void {
+    this.descriptionsVisible = !this.descriptionsVisible;
+    for (const record of this.records) {
+      record.handle.setDescriptionVisible(this.descriptionsVisible);
+    }
   }
 
   private requestSiteMode(mode: SiteMode): void {

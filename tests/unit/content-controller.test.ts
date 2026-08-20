@@ -61,6 +61,7 @@ function rendererHarness() {
         removed = true;
       }),
       update: vi.fn(),
+      setDescriptionVisible: vi.fn(),
       isRevealed: () => revealed,
     };
     items.push({ candidate, options, handle });
@@ -245,6 +246,33 @@ describe("ContentController", () => {
     options.onAllowSite?.();
 
     expect(setSiteMode).toHaveBeenCalledWith("https://news.example", "trusted");
+  });
+
+  it("toggles descriptions for current media and applies the page choice to future media", () => {
+    const first = document.createElement("img");
+    const second = document.createElement("img");
+    document.body.append(first, second);
+    const harness = controllerHarness(new Map([
+      [first, candidate(first, "image")],
+      [second, candidate(second, "image")],
+    ]));
+    harness.controller.start({ origin: "https://news.example", mode: "protected" });
+    harness.observer.emit([first]);
+
+    const firstOptions = harness.renderer.items[0]?.options as ProtectionOptions & {
+      onToggleDescriptions?: () => void;
+      descriptionsVisible?: boolean;
+    };
+    expect(firstOptions.descriptionsVisible).toBe(true);
+    expect(typeof firstOptions.onToggleDescriptions).toBe("function");
+    firstOptions.onToggleDescriptions?.();
+    expect(harness.renderer.items[0]?.handle.setDescriptionVisible).toHaveBeenCalledWith(false);
+
+    harness.observer.emit([second]);
+    const secondOptions = harness.renderer.items[1]?.options as ProtectionOptions & {
+      descriptionsVisible?: boolean;
+    };
+    expect(secondOptions.descriptionsVisible).toBe(false);
   });
 
   it("keeps one site control in Trusted mode and restores Protected on request", () => {
