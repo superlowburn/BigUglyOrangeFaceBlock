@@ -139,7 +139,7 @@ describe("ProtectionRenderer", () => {
       "Reveal all on page",
       "Always show on this site",
     ]);
-    expect(layer?.querySelector(".eg-menu-brand")?.textContent).toBe("GogglesNo disturbing surprises.");
+    expect(layer?.querySelector(".eg-menu-brand")?.textContent).toBe("Custom GogglesBlocked subjects and site rules");
     expect(layer?.querySelector(".eg-goggles svg")?.getAttribute("aria-hidden")).toBe("true");
   });
 
@@ -501,7 +501,7 @@ describe("ProtectionRenderer", () => {
 
     expect(goggles?.getAttribute("aria-label")).toBe("Goggles site options");
     expect(layer?.querySelector(".eg-site-protect")?.textContent).toBe("Frost this site again");
-    expect(layer?.querySelector(".eg-menu-brand")?.textContent).toBe("GogglesNo disturbing surprises.");
+    expect(layer?.querySelector(".eg-menu-brand")?.textContent).toBe("Custom GogglesBlocked subjects and site rules");
     layer?.querySelector(".eg-site-protect")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(onProtectSite).toHaveBeenCalledTimes(1);
 

@@ -149,6 +149,31 @@ describe("ContentController", () => {
     expect(harness.renderer.protect).not.toHaveBeenCalled();
   });
 
+  it("keeps matching subject images protected on a Trusted site", () => {
+    const trump = document.createElement("img");
+    trump.alt = "Donald Trump at a campaign event";
+    const unrelated = document.createElement("img");
+    unrelated.alt = "A quiet lake";
+    document.body.append(trump, unrelated);
+    const harness = controllerHarness(new Map([
+      [trump, candidate(trump, "image")],
+      [unrelated, candidate(unrelated, "image")],
+    ]));
+
+    harness.controller.start({
+      origin: "https://news.example",
+      mode: "trusted",
+      blockedSubjects: { enabled: true, keywords: ["Trump", "Donald Trump"] },
+    });
+    harness.observer.emit([trump, unrelated]);
+
+    expect(harness.renderer.protect).toHaveBeenCalledTimes(1);
+    expect(harness.renderer.protect).toHaveBeenCalledWith(
+      candidate(trump, "image"),
+      expect.objectContaining({ mode: "trusted" }),
+    );
+  });
+
   it("classifies, describes, and protects one discovered candidate", () => {
     const image = document.createElement("img");
     document.body.append(image);
@@ -586,6 +611,7 @@ function bootstrapHarness(
   controller: {
     start: ReturnType<typeof vi.fn>;
     applyMode: ReturnType<typeof vi.fn>;
+    applyBlockedSubjects: ReturnType<typeof vi.fn>;
     stop: ReturnType<typeof vi.fn>;
   };
   sendMessage: ReturnType<typeof vi.fn>;
@@ -595,6 +621,7 @@ function bootstrapHarness(
   const controller = {
     start: vi.fn(),
     applyMode: vi.fn(),
+    applyBlockedSubjects: vi.fn(),
     stop: vi.fn(),
   };
   const sendMessage = vi.fn().mockResolvedValue({
@@ -603,6 +630,8 @@ function bootstrapHarness(
   });
   const watchPolicy = vi.fn(() => vi.fn());
   const getDescriptionsVisible = vi.fn().mockResolvedValue(false);
+  const getBlockedSubjects = vi.fn().mockResolvedValue({ enabled: false, keywords: [] });
+  const watchBlockedSubjects = vi.fn(() => vi.fn());
   const addPageHideListener = vi.fn();
   const dependencies: ContentBootstrapDependencies = {
     href: "https://child.example/story",
@@ -611,7 +640,9 @@ function bootstrapHarness(
     createController: () => controller,
     sendMessage,
     getDescriptionsVisible,
+    getBlockedSubjects,
     watchPolicy,
+    watchBlockedSubjects,
     addPageHideListener,
     ...overrides,
   };
@@ -683,6 +714,30 @@ describe("content-script bootstrap", () => {
       mode: "strict",
       descriptionsVisible: true,
     });
+  });
+
+  it("starts and live-updates the enabled blocked-subject preset", async () => {
+    const initial = { enabled: true, keywords: ["Trump", "Donald Trump"] };
+    let listener: ((config: typeof initial) => void) | undefined;
+    const harness = bootstrapHarness({
+      getBlockedSubjects: vi.fn().mockResolvedValue(initial),
+      watchBlockedSubjects: vi.fn((next) => {
+        listener = next;
+        return vi.fn();
+      }),
+    });
+
+    await bootstrapContentScript(harness.dependencies);
+
+    expect(harness.controller.start).toHaveBeenCalledWith({
+      origin: "https://top.example",
+      mode: "strict",
+      descriptionsVisible: false,
+      blockedSubjects: initial,
+    });
+    const updated = { enabled: true, keywords: ["President Trump"] };
+    listener?.(updated);
+    expect(harness.controller.applyBlockedSubjects).toHaveBeenCalledWith(updated);
   });
 
   it("keeps the site policy when the optional description preference cannot load", async () => {

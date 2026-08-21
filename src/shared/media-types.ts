@@ -15,6 +15,7 @@ export interface PolicyContext {
   origin: string;
   mode: SiteMode;
   descriptionsVisible?: boolean;
+  blockedSubjects?: import("./blocked-subjects").BlockedSubjectsConfig;
 }
 
 export type ExtensionMessage =

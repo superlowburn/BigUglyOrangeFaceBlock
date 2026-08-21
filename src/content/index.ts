@@ -1,10 +1,15 @@
 import { isSiteMode, SitePolicyStore } from "../shared/site-policy";
 import type { ExtensionMessage, PolicyContext, SiteMode } from "../shared/media-types";
 import { ContentController } from "./content-controller";
+import {
+  BlockedSubjectsStore,
+  type BlockedSubjectsConfig,
+} from "../shared/blocked-subjects";
 
 interface ContentControllerPort {
   start(context: PolicyContext): void;
   applyMode(mode: SiteMode): void;
+  applyBlockedSubjects(config: BlockedSubjectsConfig): void;
   stop(options?: { restoreMedia?: boolean }): void;
 }
 
@@ -20,7 +25,9 @@ export interface ContentBootstrapDependencies {
   createController: () => ContentControllerPort;
   sendMessage: (message: ExtensionMessage) => Promise<unknown>;
   getDescriptionsVisible: (origin: string) => Promise<boolean>;
+  getBlockedSubjects: () => Promise<BlockedSubjectsConfig>;
   watchPolicy: (origin: string, listener: (mode: SiteMode) => void) => () => void;
+  watchBlockedSubjects: (listener: (config: BlockedSubjectsConfig) => void) => () => void;
   addPageHideListener: (listener: () => void) => void;
 }
 
@@ -33,11 +40,13 @@ export async function bootstrapContentScript(
 
   const controller = dependencies.createController();
   let stopWatching: (() => void) | null = null;
+  let stopWatchingBlockedSubjects: (() => void) | null = null;
   let disposed = false;
 
   dependencies.addPageHideListener(() => {
     disposed = true;
     stopWatching?.();
+    stopWatchingBlockedSubjects?.();
     controller.stop({ restoreMedia: false });
   });
 
@@ -48,10 +57,19 @@ export async function bootstrapContentScript(
 
     const descriptionsVisible = await dependencies.getDescriptionsVisible(response.origin)
       .catch(() => false);
+    const blockedSubjects = await dependencies.getBlockedSubjects()
+      .catch(() => ({ enabled: false, keywords: [] }));
     if (disposed) return;
-    controller.start({ ...response, descriptionsVisible });
+    controller.start({
+      ...response,
+      descriptionsVisible,
+      ...(blockedSubjects.enabled ? { blockedSubjects } : {}),
+    });
     stopWatching = dependencies.watchPolicy(response.origin, (mode) => {
       controller.applyMode(mode);
+    });
+    stopWatchingBlockedSubjects = dependencies.watchBlockedSubjects((config) => {
+      controller.applyBlockedSubjects(config);
     });
   } catch {
     if (disposed) return;
@@ -64,6 +82,7 @@ export async function bootstrapContentScript(
 
 function productionDependencies(): ContentBootstrapDependencies {
   const store = new SitePolicyStore(chrome.storage.local, chrome.storage.onChanged);
+  const blockedSubjects = new BlockedSubjectsStore(chrome.storage.local, chrome.storage.onChanged);
   return {
     href: window.location.href,
     isChildFrame: window !== window.top,
@@ -85,7 +104,9 @@ function productionDependencies(): ContentBootstrapDependencies {
     }),
     sendMessage: (message) => chrome.runtime.sendMessage(message),
     getDescriptionsVisible: (origin) => store.getDescriptionsVisible(origin),
+    getBlockedSubjects: () => blockedSubjects.get(),
     watchPolicy: (origin, listener) => store.watch(origin, listener),
+    watchBlockedSubjects: (listener) => blockedSubjects.watch(listener),
     addPageHideListener: (listener) => {
       window.addEventListener("pagehide", listener, { once: true });
     },

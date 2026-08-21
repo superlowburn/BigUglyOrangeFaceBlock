@@ -13,6 +13,11 @@ import type {
   PolicyContext,
   SiteMode,
 } from "../shared/media-types";
+import {
+  candidateMatchesBlockedSubject,
+  parseBlockedSubjects,
+  type BlockedSubjectsConfig,
+} from "../shared/blocked-subjects";
 import { DocumentObserver } from "./document-observer";
 
 declare const __DEV__: boolean;
@@ -93,6 +98,7 @@ export class ContentController {
   private mode: SiteMode = "trusted";
   private origin: string | null = null;
   private descriptionsVisible = true;
+  private blockedSubjects = parseBlockedSubjects(null);
   private started = false;
   private observing = false;
 
@@ -129,6 +135,7 @@ export class ContentController {
     this.origin = context.origin;
     this.mode = context.mode;
     this.descriptionsVisible = context.descriptionsVisible ?? false;
+    this.blockedSubjects = parseBlockedSubjects(context.blockedSubjects);
     this.syncSiteControl();
     this.startObservation();
   }
@@ -169,6 +176,13 @@ export class ContentController {
         this.reportCandidateFailure(candidate.element);
       }
     }
+  }
+
+  applyBlockedSubjects(config: BlockedSubjectsConfig): void {
+    this.blockedSubjects = parseBlockedSubjects(config);
+    if (!this.started || this.mode !== "trusted") return;
+    this.clearProtection();
+    this.observer.scan(this.document);
   }
 
   stop(options: { restoreMedia?: boolean } = {}): void {
@@ -241,6 +255,10 @@ export class ContentController {
       if (!element.isConnected) return;
       if (this.mode === "trusted") {
         if (isSupportedVideoFrame(element)) void this.providerFrames.trust?.(element);
+        const candidate = this.classify(element);
+        if (candidate && candidateMatchesBlockedSubject(candidate, this.blockedSubjects)) {
+          this.createProtection(candidate);
+        }
         return;
       }
       const candidate = this.classify(element);

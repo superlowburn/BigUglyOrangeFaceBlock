@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mountOptions, type OptionsChromeApi } from "../../src/options/options";
 import { defaultPolicyKey, policyKey } from "../../src/shared/site-policy";
 
@@ -27,6 +27,9 @@ describe("mountOptions", () => {
         <button type="button" id="demo-reveal"></button>
         <div id="demo-media"></div>
         <p id="save-status"></p>
+        <input id="blocked-subjects-enabled" type="checkbox">
+        <textarea id="blocked-subject-keywords"></textarea>
+        <p id="blocked-subjects-status"></p>
         <div id="site-rules"></div>
       </main>`;
   });
@@ -75,5 +78,29 @@ describe("mountOptions", () => {
 
     expect(document.querySelector("#demo-media")?.classList).toContain("is-revealed");
     expect(document.querySelector("#demo-reveal")?.textContent).toBe("Frost again");
+  });
+
+  it("loads and saves the editable blocked-subject preset", async () => {
+    const api = chromeApi({
+      "blocked-subjects": { enabled: true, keywords: ["Trump", "Donald Trump"] },
+    });
+    await mountOptions(document.querySelector("#app")!, api);
+
+    const enabled = document.querySelector<HTMLInputElement>("#blocked-subjects-enabled")!;
+    const keywords = document.querySelector<HTMLTextAreaElement>("#blocked-subject-keywords")!;
+    expect(enabled.checked).toBe(true);
+    expect(keywords.value).toBe("Trump\nDonald Trump");
+
+    keywords.value = "Trump\nPresident Trump\nTrump";
+    keywords.dispatchEvent(new Event("change", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(api.state["blocked-subjects"]).toEqual({
+      enabled: true,
+      keywords: ["Trump", "President Trump"],
+    });
+    await vi.waitFor(() => {
+      expect(document.querySelector("#blocked-subjects-status")?.textContent).toBe("Saved locally");
+    });
   });
 });

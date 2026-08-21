@@ -158,6 +158,68 @@ h2 {
 .save-status { min-height: 24px; margin: 8px 0 0; color: var(--lens); font-size: 14px; }
 
 .site-rules { margin-top: 24px; border-top: 1px solid var(--line); }
+.subject-card {
+  margin-top: 28px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.28);
+}
+.subject-toggle {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.subject-toggle span { display: grid; gap: 3px; }
+.subject-toggle small,
+.keyword-editor > span { color: var(--muted); }
+.subject-toggle input {
+  appearance: none;
+  position: relative;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 26px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #d7d3c5;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+.subject-toggle input::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform 140ms ease;
+}
+.subject-toggle input:checked { background: var(--lens); }
+.subject-toggle input:checked::after { transform: translateX(20px); }
+.keyword-editor {
+  display: grid;
+  gap: 6px;
+  padding: 20px 22px 22px;
+}
+.keyword-editor textarea {
+  width: 100%;
+  margin-top: 10px;
+  padding: 13px 14px;
+  resize: vertical;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfaf5;
+  font: 15px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
 .site-rule { grid-template-columns: 1fr auto; align-items: center; }
 .site-rule > span { display: grid; }
 .site-rule button {

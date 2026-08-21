@@ -1,4 +1,9 @@
 import { defaultPolicyKey, isSiteMode, SitePolicyStore } from "../shared/site-policy";
+import {
+  BlockedSubjectsStore,
+  parseBlockedSubjects,
+  uniqueKeywords,
+} from "../shared/blocked-subjects";
 
 export interface OptionsChromeApi {
   storage: {
@@ -16,6 +21,7 @@ export async function mountOptions(
 ): Promise<void> {
   const values = await chromeApi.storage.local.get(null);
   const store = new SitePolicyStore(chromeApi.storage.local);
+  const blockedStore = new BlockedSubjectsStore(chromeApi.storage.local);
   const defaultMode = values[defaultPolicyKey] === "strict" ? "strict" : "protected";
   const status = root.querySelector<HTMLElement>("#save-status");
   const defaultButtons = Array.from(
@@ -28,6 +34,26 @@ export async function mountOptions(
     }
   };
   selectDefault(defaultMode);
+
+  const blocked = parseBlockedSubjects(values["blocked-subjects"]);
+  const blockedEnabled = root.querySelector<HTMLInputElement>("#blocked-subjects-enabled");
+  const blockedKeywords = root.querySelector<HTMLTextAreaElement>("#blocked-subject-keywords");
+  const blockedStatus = root.querySelector<HTMLElement>("#blocked-subjects-status");
+  if (blockedEnabled) blockedEnabled.checked = blocked.enabled;
+  if (blockedKeywords) blockedKeywords.value = blocked.keywords.join("\n");
+  const saveBlockedSubjects = (): void => {
+    const config = parseBlockedSubjects({
+      enabled: blockedEnabled?.checked ?? false,
+      keywords: uniqueKeywords(blockedKeywords?.value.split("\n") ?? []),
+    });
+    if (blockedKeywords) blockedKeywords.value = config.keywords.join("\n");
+    void blockedStore.set(config).then(() => {
+      values["blocked-subjects"] = config;
+      if (blockedStatus) blockedStatus.textContent = "Saved locally";
+    });
+  };
+  blockedEnabled?.addEventListener("change", saveBlockedSubjects);
+  blockedKeywords?.addEventListener("change", saveBlockedSubjects);
 
   for (const button of defaultButtons) {
     button.addEventListener("click", () => {

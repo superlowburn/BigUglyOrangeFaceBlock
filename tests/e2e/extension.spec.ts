@@ -807,7 +807,7 @@ test("has accessible goggles navigation, specified caption contrast, and only ap
       name: "Always show visual media on this site",
       exact: true,
     });
-    const settings = layer.getByRole("button", { name: "Open Goggles settings" });
+    const settings = layer.getByRole("button", { name: "Open Custom Goggles settings" });
     await page.locator("#before-media").focus();
     await page.keyboard.press("Tab");
     expect(await revealThis.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);

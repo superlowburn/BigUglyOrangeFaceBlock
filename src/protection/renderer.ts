@@ -385,7 +385,9 @@ export class ProtectionRenderer {
       event.stopPropagation();
       record.onAllowSite();
     });
-    menu.append(reveal, revealAll, allowSite, this.createMenuBrand(record.onOpenSettings));
+    menu.append(reveal, revealAll);
+    if (record.mode !== "trusted") menu.append(allowSite);
+    menu.append(this.createMenuBrand(record.onOpenSettings));
     gogglesControl.append(goggles, menu);
     goggles.addEventListener("click", (event) => {
       event.preventDefault();
@@ -477,12 +479,12 @@ export class ProtectionRenderer {
   }
 
   private createMenuBrand(onOpenSettings: () => void): HTMLButtonElement {
-    const brand = this.createButton("", "eg-menu-brand", "Open Goggles settings");
+    const brand = this.createButton("", "eg-menu-brand", "Open Custom Goggles settings");
     brand.className = "eg-menu-brand";
     const name = this.document.createElement("strong");
-    name.textContent = "Goggles";
+    name.textContent = "Custom Goggles";
     const tagline = this.document.createElement("span");
-    tagline.textContent = "No disturbing surprises.";
+    tagline.textContent = "Blocked subjects and site rules";
     brand.append(name, tagline);
     brand.addEventListener("click", (event) => {
       if (!this.trustedActivation(event)) return;
