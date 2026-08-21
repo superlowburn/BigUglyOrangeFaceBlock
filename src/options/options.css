@@ -42,14 +42,9 @@ main {
 }
 
 .brand-mark {
-  width: 58px;
-  height: 32px;
+  width: 52px;
+  height: 52px;
   overflow: visible;
-  fill: none;
-  stroke: var(--lens);
-  stroke-width: 2.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 .brand-copy { display: grid; line-height: 1.15; }
 .brand-copy small {

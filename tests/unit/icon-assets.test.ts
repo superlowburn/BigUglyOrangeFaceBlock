@@ -7,7 +7,7 @@ describe("extension icon assets", () => {
       readFile("src/options/options.html", "utf8"),
       readFile("public/icons/icon.svg", "utf8"),
     ]);
-    const markPath = 'M4 10 11 4h15l3 7v11l-5 6H11l-7-7V10Zm56 0-7-6H38l-3 7v11l5 6h13l7-7V10Z';
+    const markPath = 'M16 29v-5C16 13 23 7 32 7s16 6 16 17v5c4 1 6 4 6 8s-2 7-6 8v4c0 6-7 10-16 10S16 55 16 49v-4c-4-1-6-4-6-8s2-7 6-8Z';
 
     expect(settings).toContain(markPath);
     expect(iconSource).toContain(markPath);
