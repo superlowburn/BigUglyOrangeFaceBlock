@@ -133,7 +133,7 @@ export class ContentController {
     if (this.started) this.stop();
     this.started = true;
     this.origin = context.origin;
-    this.mode = context.mode;
+    this.mode = normalizeMode(context.mode);
     this.descriptionsVisible = context.descriptionsVisible ?? false;
     this.blockedSubjects = parseBlockedSubjects(context.blockedSubjects);
     this.syncSiteControl();
@@ -141,32 +141,12 @@ export class ContentController {
   }
 
   applyMode(mode: SiteMode): void {
+    mode = normalizeMode(mode);
     if (!this.started || mode === this.mode) return;
-
-    if (this.mode === "trusted" || mode === "trusted") {
-      this.mode = mode;
-      this.syncSiteControl();
-      this.reconcileProtection();
-      return;
-    }
 
     this.mode = mode;
     this.syncSiteControl();
-    for (const record of [...this.records]) {
-      const { candidate } = record;
-      try {
-        this.detachRecord(record, false);
-        if (!candidate.element.isConnected) {
-          this.restoreMedia(candidate);
-          continue;
-        }
-        this.enforceProtection(candidate);
-        this.createProtection(candidate);
-      } catch {
-        this.restoreMedia(candidate);
-        this.reportCandidateFailure(candidate.element);
-      }
-    }
+    this.reconcileProtection();
   }
 
   applyBlockedSubjects(config: BlockedSubjectsConfig): void {
@@ -445,4 +425,8 @@ function isDevelopmentRuntime(): boolean {
 function replaceSource(frame: HTMLIFrameElement, source: string | null): void {
   if (source === null) frame.removeAttribute("src");
   else frame.setAttribute("src", source);
+}
+
+function normalizeMode(mode: SiteMode): SiteMode {
+  return mode === "strict" ? "protected" : mode;
 }

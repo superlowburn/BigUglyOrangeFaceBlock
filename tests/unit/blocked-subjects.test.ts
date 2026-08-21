@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  candidateMatchesBlockedSubject,
   defaultTrumpKeywords,
   matchesBlockedSubject,
   parseBlockedSubjects,
@@ -23,6 +24,23 @@ describe("blocked subjects", () => {
     article.innerHTML = "<h2>Donald J. Trump holds a campaign event</h2><img>";
 
     expect(matchesBlockedSubject(article.querySelector("img")!, defaultTrumpKeywords)).toBe(true);
+  });
+
+  it("matches supported video candidates from local poster and title evidence", () => {
+    const nativeVideo = document.createElement("video");
+    nativeVideo.poster = "donald-trump-campaign.jpg";
+    const providerFrame = document.createElement("iframe");
+    providerFrame.title = "Donald Trump campaign video";
+    const config = { enabled: true, keywords: ["Trump"] };
+
+    expect(candidateMatchesBlockedSubject(
+      { element: nativeVideo, kind: "native-video" },
+      config,
+    )).toBe(true);
+    expect(candidateMatchesBlockedSubject(
+      { element: providerFrame, kind: "video-iframe" },
+      config,
+    )).toBe(true);
   });
 
   it("does not use unrelated page text or broad political language", () => {

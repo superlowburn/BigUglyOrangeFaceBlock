@@ -58,7 +58,7 @@ export function candidateMatchesBlockedSubject(
   config: BlockedSubjectsConfig,
 ): boolean {
   return config.enabled &&
-    (candidate.kind === "image" || candidate.kind === "background-image") &&
+    isSubjectCandidate(candidate) &&
     matchesBlockedSubject(candidate.element, config.keywords);
 }
 
@@ -110,6 +110,13 @@ function subjectContext(element: HTMLElement): string {
     )).map((node) => node.textContent ?? ""));
   }
   return values.join(" ").replace(/\s+/gu, " ");
+}
+
+function isSubjectCandidate(candidate: MediaCandidate): boolean {
+  return candidate.kind === "image" ||
+    candidate.kind === "background-image" ||
+    candidate.kind === "native-video" ||
+    candidate.kind === "video-iframe";
 }
 
 function subjectPattern(keyword: string): RegExp {

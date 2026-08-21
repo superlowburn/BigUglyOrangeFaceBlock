@@ -206,6 +206,51 @@ describe("ContentController", () => {
     expect(harness.renderer.activeFor(ordinaryImage)).toHaveLength(0);
   });
 
+  it("keeps matching native and provider videos protected while a site becomes Trusted", () => {
+    const nativeVideo = document.createElement("video");
+    nativeVideo.poster = "donald-trump-campaign.jpg";
+    const providerFrame = document.createElement("iframe");
+    providerFrame.title = "Donald Trump campaign video";
+    document.body.append(nativeVideo, providerFrame);
+    const harness = controllerHarness(new Map<Element, MediaCandidate>([
+      [nativeVideo, candidate(nativeVideo, "native-video")],
+      [providerFrame, candidate(providerFrame, "video-iframe")],
+    ]));
+
+    harness.controller.start({
+      origin: "https://news.example",
+      mode: "protected",
+      blockedSubjects: { enabled: true, keywords: ["Trump"] },
+    });
+    harness.observer.emit([nativeVideo, providerFrame]);
+    harness.controller.applyMode("trusted");
+
+    expect(harness.renderer.activeFor(nativeVideo)).toHaveLength(1);
+    expect(harness.renderer.activeFor(providerFrame)).toHaveLength(1);
+  });
+
+  it("protects matching native and provider videos discovered on a Trusted site", () => {
+    const nativeVideo = document.createElement("video");
+    nativeVideo.poster = "donald-trump-campaign.jpg";
+    const providerFrame = document.createElement("iframe");
+    providerFrame.title = "Donald Trump campaign video";
+    const harness = controllerHarness(new Map<Element, MediaCandidate>([
+      [nativeVideo, candidate(nativeVideo, "native-video")],
+      [providerFrame, candidate(providerFrame, "video-iframe")],
+    ]));
+
+    harness.controller.start({
+      origin: "https://news.example",
+      mode: "trusted",
+      blockedSubjects: { enabled: true, keywords: ["Trump"] },
+    });
+    document.body.append(nativeVideo, providerFrame);
+    harness.observer.emit([nativeVideo, providerFrame]);
+
+    expect(harness.renderer.activeFor(nativeVideo)).toHaveLength(1);
+    expect(harness.renderer.activeFor(providerFrame)).toHaveLength(1);
+  });
+
   it("adds ordinary media when a Trusted site becomes Protected without duplicating subjects", () => {
     const blockedImage = document.createElement("img");
     blockedImage.alt = "Donald Trump at a campaign event";
@@ -542,20 +587,28 @@ describe("ContentController", () => {
     expect(harness.providerFrames.restore).not.toHaveBeenCalled();
   });
 
-  it("rebuilds existing handles immediately when Protected changes to Strict", () => {
+  it("keeps a deliberately revealed subject visible across a legacy Strict transition", () => {
     const image = document.createElement("img");
+    image.alt = "Donald Trump at a campaign event";
     document.body.append(image);
     const harness = controllerHarness(
       new Map([[image, candidate(image, "image")]]),
     );
-    harness.controller.start({ origin: "https://news.example", mode: "protected" });
+    harness.controller.start({
+      origin: "https://news.example",
+      mode: "protected",
+      blockedSubjects: { enabled: true, keywords: ["Trump"] },
+    });
     harness.observer.emit([image]);
+    const matchingRecord = harness.renderer.activeFor(image)[0];
+    matchingRecord?.handle.reveal();
 
     harness.controller.applyMode("strict");
 
-    expect(harness.renderer.items[0]?.handle.remove).toHaveBeenCalledTimes(1);
-    expect(harness.renderer.protect).toHaveBeenCalledTimes(2);
-    expect(harness.renderer.items[1]?.options.mode).toBe("strict");
+    expect(harness.renderer.activeFor(image)[0]).toBe(matchingRecord);
+    expect(matchingRecord?.handle.isRevealed()).toBe(true);
+    expect(harness.renderer.protect).toHaveBeenCalledTimes(1);
+    expect(matchingRecord?.handle.remove).not.toHaveBeenCalled();
   });
 
   it("updates protected rectangles on resize and rebuilds on relevant attribute changes", () => {
