@@ -147,6 +147,19 @@ describe("ProtectionRenderer", () => {
       .toBe("Reveal blocked subject: A black audio component");
   });
 
+  it("keeps a blocked image frosted beneath an overlapping iframe", () => {
+    const image = document.createElement("img");
+    const frame = document.createElement("iframe");
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(20, 30, 640, 360));
+    vi.spyOn(frame, "getBoundingClientRect").mockReturnValue(rect(20, 30, 640, 360));
+    document.body.append(image, frame);
+    const renderer = new ProtectionRenderer();
+
+    protect(renderer, image, { blockedSubject: true });
+
+    expect(renderer.debugLayerFor(image)?.style.visibility).toBe("");
+  });
+
   it("uses one info button to preview and pin the full description without revealing", () => {
     const description = "A deliberately long description of an image that continues well beyond fifty characters.";
     const image = document.createElement("img");

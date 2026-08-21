@@ -320,10 +320,6 @@ export class ProtectionRenderer {
   private updateRecord(record: ProtectionRecord, currentBox?: DOMRect): void {
     if (record.removed) return;
     const box = currentBox ?? record.candidate.element.getBoundingClientRect();
-    record.layer.style.visibility = isVisualKind(record.candidate.kind) &&
-      isSubstantiallyCoveredByIframe(this.document, record.candidate.element, box)
-      ? "hidden"
-      : "";
     const presentation = presentationFor(box);
     const { compact, controlSize, inset, blur, showInfo } = presentation;
     record.layer.style.setProperty("--eg-control-size", `${controlSize}px`);
@@ -448,34 +444,6 @@ function markProtected(candidate: MediaCandidate): void {
     "data-eclipse-goggles-protected",
     mediaLabel(candidate.kind),
   );
-}
-
-function isVisualKind(kind: MediaKind): boolean {
-  return kind === "image" || kind === "background-image";
-}
-
-function isSubstantiallyCoveredByIframe(
-  document: Document,
-  element: HTMLElement,
-  box: DOMRect,
-): boolean {
-  const area = box.width * box.height;
-  if (area <= 0) return false;
-
-  for (const frame of document.querySelectorAll("iframe")) {
-    if (frame === element) continue;
-    const frameBox = frame.getBoundingClientRect();
-    const intersectionWidth = Math.max(
-      0,
-      Math.min(box.right, frameBox.right) - Math.max(box.left, frameBox.left),
-    );
-    const intersectionHeight = Math.max(
-      0,
-      Math.min(box.bottom, frameBox.bottom) - Math.max(box.top, frameBox.top),
-    );
-    if ((intersectionWidth * intersectionHeight) / area >= 0.8) return true;
-  }
-  return false;
 }
 
 function showInTopLayer(host: HTMLElement): void {

@@ -196,6 +196,8 @@ describe("ContentController", () => {
       blockedSubjects,
     });
     harness.observer.emit([blockedImage, ordinaryImage]);
+
+    expect(harness.renderer.activeFor(blockedImage)[0]?.options.blockedSubject).toBe(true);
     harness.controller.applyMode("trusted");
 
     expect(harness.renderer.activeFor(blockedImage)).toHaveLength(1);

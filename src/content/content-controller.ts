@@ -227,7 +227,7 @@ export class ContentController {
       if (this.mode === "trusted") {
         const candidate = this.classify(element);
         if (candidate && candidateMatchesBlockedSubject(candidate, this.blockedSubjects)) {
-          this.createProtection(candidate, true);
+          this.createProtection(candidate);
           return;
         }
         if (isSupportedVideoFrame(element)) void this.providerFrames.trust?.(element);
@@ -246,7 +246,10 @@ export class ContentController {
     }
   }
 
-  private createProtection(candidate: MediaCandidate, blockedSubject = false): void {
+  private createProtection(
+    candidate: MediaCandidate,
+    blockedSubject = candidateMatchesBlockedSubject(candidate, this.blockedSubjects),
+  ): void {
     if (isVisualCandidate(candidate) && this.hasOverlappingVideoRecord(candidate)) return;
     if (isVideoCandidate(candidate)) this.removeOverlappingVisualRecords(candidate);
 
