@@ -345,7 +345,7 @@ describe("ProtectionRenderer", () => {
     expect(uncancelled).toBe(false);
   });
 
-  it("reveals linked media and follows its link with the same click", () => {
+  it("reveals linked media without activating its link", () => {
     const link = document.createElement("a");
     link.href = "/destination";
     const image = document.createElement("img");
@@ -374,8 +374,8 @@ describe("ProtectionRenderer", () => {
     expect(host?.nextElementSibling).toBe(after);
     expect(link.contains(host)).toBe(false);
     expect(uncancelled).toBe(false);
-    expect(linkActivation).toHaveBeenCalledTimes(1);
-    expect(documentActivation).toHaveBeenCalledTimes(1);
+    expect(linkActivation).not.toHaveBeenCalled();
+    expect(documentActivation).not.toHaveBeenCalled();
     expect(onReveal).toHaveBeenCalledTimes(1);
   });
 

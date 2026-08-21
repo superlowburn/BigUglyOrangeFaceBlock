@@ -385,7 +385,7 @@ test("protects article images", async () => {
   }
 });
 
-test("follows linked media on reveal while keeping button-wrapped pictures contained", async () => {
+test("reveals linked and button-wrapped media without activating their containers", async () => {
   const extension = await launchExtension();
   const { page } = extension;
   try {
@@ -449,7 +449,7 @@ test("follows linked media on reveal while keeping button-wrapped pictures conta
     await revealThisWithText(page, "A button wrapped picture").click();
     expect(await page.evaluate(() =>
       (window as typeof window & { ancestorActivations: number }).ancestorActivations
-    )).toBe(1);
+    )).toBe(0);
     expect(page.url()).toBe(`${fixtureOrigin}/article.html`);
   } finally {
     await closeExtension(extension);

@@ -39,7 +39,45 @@ test("protects only the meaningful foreground copy in a stacked image treatment"
   }
 });
 
-test("opens a Reddit link post destination with one reveal click", async () => {
+test("uses one frost layer for a Reddit video with a gradient control scrim", async () => {
+  const context = await chromium.launchPersistentContext("", {
+    headless: false,
+    viewport: windowSize,
+    args: [
+      `--window-size=${windowSize.width},${windowSize.height}`,
+      `--disable-extensions-except=${extensionPath}`,
+      `--load-extension=${extensionPath}`,
+    ],
+  });
+
+  try {
+    await (context.serviceWorkers()[0] ?? context.waitForEvent("serviceworker"));
+    const page = context.pages()[0] ?? await context.newPage();
+    await page.goto("http://127.0.0.1:4173/reddit-video-stack.html");
+
+    await expect(page.locator("[data-eclipse-goggles-protected]")).toHaveCount(1);
+    await expect(page.locator("[data-eclipse-goggles-root]")).toHaveCount(1);
+    await expect(page.locator("video")).toHaveAttribute(
+      "data-eclipse-goggles-protected",
+      "video",
+    );
+    await expect(page.locator(".scrim")).not.toHaveAttribute(
+      "data-eclipse-goggles-protected",
+      "image",
+    );
+
+    await page.getByRole("button", {
+      name: "Reveal protected media: Reddit native video",
+    }).click();
+
+    await expect(page.locator("[data-eclipse-goggles-protected]")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Reveal protected media/ })).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test("reveals a linked Reddit thumbnail without activating its destination", async () => {
   const context = await chromium.launchPersistentContext("", {
     headless: false,
     viewport: windowSize,
@@ -58,7 +96,11 @@ test("opens a Reddit link post destination with one reveal click", async () => {
       name: "Reveal protected media: Reddit video thumbnail",
     }).click();
 
-    await expect.poll(() => new URL(page.url()).pathname).toBe("/direct-video.html");
+    await expect(page.locator("img")).not.toHaveAttribute(
+      "data-eclipse-goggles-protected",
+      "image",
+    );
+    expect(new URL(page.url()).pathname).toBe("/reddit-link.html");
   } finally {
     await context.close();
   }
@@ -102,7 +144,7 @@ test("keeps visible Goggles controls clickable above a hostile page stacking con
   }
 });
 
-test("opens a Reddit shadow-card destination with one reveal click", async () => {
+test("reveals a linked Reddit shadow card without activating its destination", async () => {
   const context = await chromium.launchPersistentContext("", {
     headless: false,
     viewport: windowSize,
@@ -121,7 +163,7 @@ test("opens a Reddit shadow-card destination with one reveal click", async () =>
       name: "Reveal protected media: Background image protected by Goggles",
     }).click();
 
-    await expect.poll(() => new URL(page.url()).pathname).toBe("/shadow-video.html");
+    expect(new URL(page.url()).pathname).toBe("/reddit-shadow-link.html");
   } finally {
     await context.close();
   }

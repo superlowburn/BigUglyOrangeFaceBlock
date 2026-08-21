@@ -55,7 +55,7 @@ export function classifyElement(
 
   if (
     hasBothDimensions(width, height, undecoratedImageMinimum) &&
-    env.style(element).backgroundImage !== "none" &&
+    env.style(element).backgroundImage.includes("url(") &&
     !hasRenderedText(element, env) &&
     !element.querySelector(interactiveDescendant)
   ) {

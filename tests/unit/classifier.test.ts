@@ -129,6 +129,18 @@ describe("classifyElement", () => {
     expect(classifyElement(element, env)).toMatchObject({ kind: "background-image" });
   });
 
+  it("ignores a CSS gradient used as a video control scrim", () => {
+    const { env, setBox, setBackground } = environment();
+    const element = document.createElement("div");
+    setBox(element, 640, 360);
+    setBackground(
+      element,
+      "linear-gradient(to top, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0))",
+    );
+
+    expect(classifyElement(element, env)).toBeNull();
+  });
+
   it("ignores a CSS background that contains visible text", () => {
     const { env, setBox, setBackground } = environment();
     const element = document.createElement("div");

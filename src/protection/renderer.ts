@@ -304,11 +304,7 @@ export class ProtectionRenderer {
       `Reveal protected media: ${description}`,
     );
     revealSurface.addEventListener("click", (event) => {
-      const linkedMedia = record.candidate.element.closest<HTMLElement>("a[href], [role=link]");
-      const redditContent = redditContentHref(record.candidate.element);
-      if (!this.activate(record, event, "reveal")) return;
-      if (redditContent) this.window.location.assign(redditContent);
-      else linkedMedia?.click();
+      this.activate(record, event, "reveal");
     });
 
     const children: HTMLElement[] = [revealSurface];
@@ -651,34 +647,6 @@ function markProtected(candidate: MediaCandidate): void {
     "data-eclipse-goggles-protected",
     mediaLabel(candidate.kind),
   );
-}
-
-function redditContentHref(element: HTMLElement): string | null {
-  const post = composedClosest(
-    element,
-    'shreddit-post[post-type="link"][content-href]',
-  );
-  const href = post?.getAttribute("content-href");
-  if (!href) return null;
-
-  try {
-    const url = new URL(href, element.ownerDocument.baseURI);
-    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
-  } catch {
-    return null;
-  }
-}
-
-function composedClosest(element: Element, selector: string): HTMLElement | null {
-  let current: Element | null = element;
-  while (current) {
-    const match = current.closest<HTMLElement>(selector);
-    if (match) return match;
-    const root = current.getRootNode();
-    if (!(root instanceof ShadowRoot)) return null;
-    current = root.host;
-  }
-  return null;
 }
 
 function showInTopLayer(host: HTMLElement): void {
