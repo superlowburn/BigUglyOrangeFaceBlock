@@ -29,6 +29,17 @@ type ProtectedVideo = {
   kind: "native" | "provider";
 };
 
+test("top-clipped alignment requires a bounded clip and meaningful reveal surface", () => {
+  const target = { x: 0, y: 0, width: 427, height: 480 };
+  expect(isAlignedTopClippedLayer(target, { x: 0, y: 56, width: 427, height: 424 })).toBe(true);
+  expect(isAlignedTopClippedLayer(target, { x: 0, y: 479, width: 427, height: 1 })).toBe(false);
+  expect(isAlignedTopClippedLayer(target, { x: 0, y: 121, width: 427, height: 359 })).toBe(false);
+
+  const outgoingTarget = { x: 0, y: -380, width: 427, height: 480 };
+  expect(isAlignedTopClippedLayer(outgoingTarget, { x: 0, y: 56, width: 427, height: 44 })).toBe(true);
+  expect(isAlignedTopClippedLayer(outgoingTarget, { x: 0, y: 99, width: 427, height: 1 })).toBe(false);
+});
+
 test.describe("live-site video frosting", () => {
   test.skip(!runLiveQa, "Set GOGGLES_LIVE_VIDEO_QA=1 to run public-site acceptance tests.");
   test.describe.configure({ timeout: 90_000 });
@@ -421,8 +432,13 @@ function isAlignedTopClippedLayer(
   layer: { x: number; y: number; width: number; height: number },
 ): boolean {
   const tolerance = 2;
+  const visibleTargetTop = Math.max(0, target.y);
+  const visibleTargetHeight = Math.max(0, target.y + target.height - visibleTargetTop);
+  const topClip = Math.max(0, layer.y - visibleTargetTop);
+  const minimumSurfaceHeight = Math.min(24, visibleTargetHeight / 4);
   return (
-    layer.height > 0 &&
+    layer.height >= minimumSurfaceHeight &&
+    topClip <= 120 &&
     layer.y >= target.y - tolerance &&
     Math.abs(layer.x - target.x) <= tolerance &&
     Math.abs(layer.width - target.width) <= tolerance &&

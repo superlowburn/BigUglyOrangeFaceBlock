@@ -57,10 +57,31 @@ test("clips frost below a sticky site header without losing reveal isolation", a
     await page.getByRole("button", { name: "Frost again" }).click();
     await expect(frost).toHaveCount(1);
     await page.locator("#header-button").click({ timeout: 2_000 });
+
+    await media.evaluate((element) => {
+      window.scrollTo({
+        top: (element as HTMLImageElement).offsetTop + (element as HTMLImageElement).offsetHeight - 100,
+        behavior: "instant",
+      });
+    });
+    await expect.poll(async () => (await media.boundingBox())?.y).toBe(-380);
+    await expect.poll(async () => {
+      const box = await page.getByRole("button", {
+        name: "Reveal protected media: A linked landscape beneath a sticky site header",
+      }).boundingBox();
+      return box && { y: box.y, height: box.height };
+    }).toEqual({ y: 56, height: 44 });
+    const outgoingRevealBox = await page.getByRole("button", {
+      name: "Reveal protected media: A linked landscape beneath a sticky site header",
+    }).boundingBox();
+    expect(outgoingRevealBox?.height).toBe(44);
+    await page.locator("#header-link").click({ timeout: 2_000 });
+    await page.locator("#header-button").click({ timeout: 2_000 });
+
     expect(await page.evaluate(() => ({
       button: (window as typeof window & { headerButtonClicks: number }).headerButtonClicks,
       link: (window as typeof window & { headerLinkClicks: number }).headerLinkClicks,
-    }))).toEqual({ button: 3, link: 1 });
+    }))).toEqual({ button: 4, link: 2 });
 
     await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
     await expect.poll(async () => (await media.boundingBox())?.y).toBeGreaterThan(56);
@@ -70,6 +91,26 @@ test("clips frost below a sticky site header without losing reveal isolation", a
       frost.boundingBox(),
     ]);
     expect(restoredFrostBox).toEqual(restoredMediaBox);
+
+    await media.evaluate((element) => {
+      element.style.height = "96px";
+      window.scrollTo({ top: (element as HTMLImageElement).offsetTop, behavior: "instant" });
+    });
+    await expect.poll(async () => (await media.boundingBox())?.height).toBe(96);
+    await expect.poll(async () => {
+      const box = await page.getByRole("button", {
+        name: "Reveal protected media: A linked landscape beneath a sticky site header",
+      }).boundingBox();
+      return box && { y: box.y, height: box.height };
+    }).toEqual({ y: 56, height: 40 });
+    const shortRevealBox = await page.getByRole("button", {
+      name: "Reveal protected media: A linked landscape beneath a sticky site header",
+    }).boundingBox();
+    expect(shortRevealBox?.height).toBe(40);
+    await page.locator("#header-button").click({ timeout: 2_000 });
+    expect(await page.evaluate(() => (window as typeof window & {
+      headerButtonClicks: number;
+    }).headerButtonClicks)).toBe(5);
   } finally {
     await context.close();
   }

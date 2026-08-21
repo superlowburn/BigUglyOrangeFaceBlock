@@ -498,7 +498,8 @@ function topEdgeOcclusionInset(
           occluder.right >= visibleRight - 1 &&
           occluder.top <= visibleTop + 1 &&
           occluder.bottom > visibleTop + 1 &&
-          occluder.height <= Math.min(120, (visibleBottom - visibleTop) / 2)
+          occluder.height <= 120 &&
+          occluder.height < window.innerHeight - 1
         ) {
           return Math.min(box.height, Math.max(0, occluder.bottom - box.top));
         }
