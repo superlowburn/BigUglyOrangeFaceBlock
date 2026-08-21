@@ -44,7 +44,6 @@ export function classifyElement(
 
   if (element instanceof HTMLImageElement) {
     if (!hasBothDimensions(width, height, imageMinimum)) return null;
-    if (hasOverlappingVideo(element, env)) return null;
 
     const alt = element.getAttribute("alt")?.trim() ?? "";
     if (!alt && hasMeaningfulOverlappingCopy(element, env)) return null;
@@ -57,7 +56,6 @@ export function classifyElement(
   if (
     hasBothDimensions(width, height, undecoratedImageMinimum) &&
     env.style(element).backgroundImage.includes("url(") &&
-    !hasOverlappingVideo(element, env) &&
     !hasRenderedText(element, env) &&
     !element.querySelector(interactiveDescendant)
   ) {
@@ -65,21 +63,6 @@ export function classifyElement(
   }
 
   return null;
-}
-
-function hasOverlappingVideo(
-  element: HTMLElement,
-  env: ClassificationEnvironment,
-): boolean {
-  const box = env.box(element);
-  let container: HTMLElement | null = element;
-  for (let depth = 0; container && container !== element.ownerDocument.body && depth < 8; depth += 1) {
-    for (const video of container.querySelectorAll("video")) {
-      if (substantiallyOverlaps(box, env.box(video), 0.5)) return true;
-    }
-    container = container.parentElement;
-  }
-  return false;
 }
 
 function hasMeaningfulOverlappingCopy(

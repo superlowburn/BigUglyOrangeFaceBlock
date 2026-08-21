@@ -14,6 +14,7 @@ import type {
   ProtectionOptions,
 } from "../../src/protection/renderer";
 import { ProviderFrameController } from "../../src/media/provider-frames";
+import { classifyElement } from "../../src/media/classifier";
 
 class FakeDocumentObserver implements DocumentObserverPort {
   readonly start = vi.fn((callback: (elements: readonly Element[]) => void) => {
@@ -180,6 +181,46 @@ describe("ContentController", () => {
       expect.objectContaining({ mode: "trusted", blockedSubject: true }),
     );
   });
+
+  it.each([
+    ["poster first", ["poster", "video"] as const],
+    ["video first", ["video", "poster"] as const],
+  ])(
+    "keeps one blocked-subject layer over an overlapping poster/video stack when processed %s",
+    (_label, order) => {
+      const stack = document.createElement("div");
+      const poster = document.createElement("img");
+      poster.alt = "Donald Trump at an event";
+      const video = document.createElement("video");
+      video.setAttribute("aria-label", "News clip");
+      stack.append(poster, video);
+      document.body.append(stack);
+
+      const sharedBox = new DOMRect(20, 30, 320, 180);
+      const boxes = new Map<Element, DOMRect>([
+        [poster, sharedBox],
+        [video, sharedBox],
+      ]);
+      const classify = (element: Element) => classifyElement(element, {
+        box: (target) => boxes.get(target) ?? new DOMRect(),
+        style: (target) => getComputedStyle(target),
+      });
+      const harness = controllerHarness(new Map(), { classify });
+
+      harness.controller.start({
+        origin: "https://news.example",
+        mode: "trusted",
+        blockedSubjects: { enabled: true, keywords: ["Trump"] },
+      });
+      harness.observer.emit(order.map((item) => item === "poster" ? poster : video));
+
+      const active = harness.renderer.items.filter((item) => !item.isRemoved());
+      expect(active).toHaveLength(1);
+      expect(active[0]?.candidate.element).toBe(poster);
+      expect(active[0]?.options.blockedSubject).toBe(true);
+      expect(active[0]?.handle.isRevealed()).toBe(false);
+    },
+  );
 
   it("keeps matching subjects protected while a site becomes Trusted", () => {
     const blockedImage = document.createElement("img");

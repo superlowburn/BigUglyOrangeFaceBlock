@@ -68,20 +68,39 @@ test.describe("live-site video frosting", () => {
           protectedVideo = await findProtectedVideo(page);
         }
 
+        if (!protectedVideo) {
+          await page.screenshot({
+            path: resolve(screenshotDir, `live-${site.slug}-before.png`),
+            fullPage: false,
+            timeout: 5_000,
+          });
+          const diagnostic = await diagnoseMissingVideo(page);
+          throw new Error(`${site.name} did not expose a frostable video. ${diagnostic}`);
+        }
+
+        let cookieBlocker: string | null = null;
+        if (site.slug === "cnn") {
+          cookieBlocker = await dismissCnnCookieOverlay(page);
+          protectedVideo = await findProtectedVideo(page);
+          if (!protectedVideo) {
+            await page.screenshot({
+              path: resolve(screenshotDir, `live-${site.slug}-before.png`),
+              fullPage: false,
+              timeout: 5_000,
+            });
+            const diagnostic = await diagnoseMissingVideo(page);
+            throw new Error(cookieBlocker ?? `CNN replaced the selected video after cookie consent. ${diagnostic}`);
+          }
+        }
+
+        const { frame, target, kind } = protectedVideo;
+        await alignTarget(page, target);
         await page.screenshot({
           path: resolve(screenshotDir, `live-${site.slug}-before.png`),
           fullPage: false,
           timeout: 5_000,
         });
-
-        if (!protectedVideo) {
-          const diagnostic = await diagnoseMissingVideo(page);
-          throw new Error(`${site.name} did not expose a frostable video. ${diagnostic}`);
-        }
-
-        const { frame, target, kind } = protectedVideo;
-        await target.scrollIntoViewIfNeeded();
-        await page.waitForTimeout(500);
+        if (cookieBlocker) throw new Error(cookieBlocker);
         await expect(target).toHaveAttribute("data-eclipse-goggles-protected", "video");
         const issues: string[] = [];
         const beforeFrosts = await countOverlappingLayers(frame, target, ".eg-layer.eg-frost");
@@ -159,6 +178,7 @@ test.describe("live-site video frosting", () => {
           if (!state.paused || !state.muted) issues.push(`native video started or unmuted on reveal: ${JSON.stringify(state)}`);
         }
 
+        await alignTarget(page, target);
         await page.screenshot({
           path: resolve(screenshotDir, `live-${site.slug}-after-one-click.png`),
           fullPage: false,
@@ -182,6 +202,7 @@ test.describe("live-site video frosting", () => {
           }
         }
 
+        await alignTarget(page, target);
         await page.screenshot({
           path: resolve(screenshotDir, `live-${site.slug}-refrosted.png`),
           fullPage: false,
@@ -195,6 +216,32 @@ test.describe("live-site video frosting", () => {
     });
   }
 });
+
+async function alignTarget(page: Page, target: Locator): Promise<void> {
+  await target.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(500);
+}
+
+async function dismissCnnCookieOverlay(page: Page): Promise<string | null> {
+  for (const frame of page.frames()) {
+    const accept = frame.getByRole("button", { name: /Accept All Cookies/iu }).first();
+    if (await accept.isVisible().catch(() => false)) {
+      await accept.click({ force: true, timeout: 5_000 }).catch(() => undefined);
+      await page.waitForTimeout(3_000);
+      break;
+    }
+  }
+
+  for (const frame of page.frames()) {
+    const heading = frame.getByText("Our use of cookies and other technologies", {
+      exact: false,
+    }).first();
+    if (await heading.isVisible().catch(() => false)) {
+      return "CNN cookie consent overlay remained over the selected video";
+    }
+  }
+  return null;
+}
 
 async function settleAndScroll(page: Page): Promise<void> {
   await page.waitForTimeout(4_000);
