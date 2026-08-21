@@ -4,6 +4,7 @@ import {
   installFirstRun,
   installProviderGateLifecycle,
 } from "../../src/background/service-worker";
+import { defaultTrumpKeywords } from "../../src/shared/blocked-subjects";
 
 describe("handleExtensionMessage", () => {
   it("returns the sender tab policy for the current page", async () => {
@@ -18,7 +19,33 @@ describe("handleExtensionMessage", () => {
         { tab: { id: 7, url: "https://news.example/story" } },
         deps,
       ),
-    ).toEqual({ origin: "https://news.example", mode: "protected" });
+    ).toEqual({
+      origin: "https://news.example",
+      mode: "protected",
+      blockedSubjects: { enabled: false, keywords: defaultTrumpKeywords },
+    });
+  });
+
+  it("returns the enabled blocked-subject configuration with a verified tab policy", async () => {
+    const deps = {
+      storage: {
+        get: vi.fn().mockResolvedValue({
+          "blocked-subjects": { enabled: true, keywords: ["Donald Trump"] },
+        }),
+        set: vi.fn(),
+      },
+      tabs: { get: vi.fn().mockResolvedValue({ id: 7, url: "https://news.example/story" }) },
+    };
+
+    await expect(handleExtensionMessage(
+      { type: "policy:get-tab", tabId: 7 },
+      {},
+      deps,
+    )).resolves.toEqual({
+      origin: "https://news.example",
+      mode: "protected",
+      blockedSubjects: { enabled: true, keywords: ["Donald Trump"] },
+    });
   });
 
   it("sets the verified tab origin policy", async () => {

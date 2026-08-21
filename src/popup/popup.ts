@@ -1,5 +1,6 @@
 import type { ExtensionMessage, PolicyContext, SiteMode } from "../shared/media-types";
 import { isSiteMode } from "../shared/site-policy";
+import type { BlockedSubjectsConfig } from "../shared/blocked-subjects";
 
 type PopupTab = { id?: number | undefined; url?: string | undefined };
 
@@ -28,6 +29,18 @@ function isPolicyContext(value: unknown): value is PolicyContext {
   );
 }
 
+function isBlockedSubjectsConfig(value: unknown): value is BlockedSubjectsConfig {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "enabled" in value &&
+    typeof value.enabled === "boolean" &&
+    "keywords" in value &&
+    Array.isArray(value.keywords) &&
+    value.keywords.every((keyword) => typeof keyword === "string")
+  );
+}
+
 function createTextElement<K extends keyof HTMLElementTagNameMap>(
   tagName: K,
   className: string,
@@ -47,7 +60,7 @@ export async function mountPopup(root: HTMLElement, chromeApi: PopupChromeApi): 
   const protectionSwitch = createTextElement("button", "popup-switch", "");
   protectionSwitch.type = "button";
   protectionSwitch.setAttribute("role", "switch");
-  const blockedSubjects = createTextElement("p", "popup-subjects", "Blocked subjects stay frosted.");
+  const blockedSubjects = createTextElement("p", "popup-subjects", "");
   const error = createTextElement("p", "popup-error", "");
   error.setAttribute("role", "alert");
   error.hidden = true;
@@ -73,6 +86,14 @@ export async function mountPopup(root: HTMLElement, chromeApi: PopupChromeApi): 
     error.hidden = false;
     return;
   }
+  if (!isBlockedSubjectsConfig(initialResponse.blockedSubjects)) {
+    error.textContent = START_ERROR;
+    error.hidden = false;
+    return;
+  }
+  blockedSubjects.textContent = initialResponse.blockedSubjects.enabled
+    ? "Blocked subjects — On everywhere"
+    : "Blocked subjects — Off";
 
   let hostname: string;
   try {

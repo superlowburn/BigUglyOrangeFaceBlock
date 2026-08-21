@@ -1,5 +1,6 @@
 import type { ExtensionMessage, PolicyContext } from "../shared/media-types";
 import { isSiteMode, SitePolicyStore } from "../shared/site-policy";
+import { BlockedSubjectsStore } from "../shared/blocked-subjects";
 import { ProviderRequestGate } from "./provider-request-gate";
 
 type StorageArea = {
@@ -90,11 +91,16 @@ function originFor(tab?: Tab): string | undefined {
 async function contextFor(
   tab: Tab | undefined,
   store: SitePolicyStore,
+  blockedSubjectsStore: BlockedSubjectsStore,
 ): Promise<WorkerResponse> {
   const origin = originFor(tab);
   if (!origin) return { error: "unsupported-page" };
 
-  return { origin, mode: await store.get(origin) };
+  return {
+    origin,
+    mode: await store.get(origin),
+    blockedSubjects: await blockedSubjectsStore.get(),
+  };
 }
 
 export async function handleExtensionMessage(
@@ -105,15 +111,16 @@ export async function handleExtensionMessage(
   if (!isExtensionMessage(message)) return { error: "invalid-message" };
 
   const store = new SitePolicyStore(deps.storage);
+  const blockedSubjectsStore = new BlockedSubjectsStore(deps.storage);
 
   switch (message.type) {
     case "options:open":
       await (deps.openOptionsPage ?? (() => chrome.runtime.openOptionsPage()))();
       return { opened: true };
     case "policy:get-current":
-      return contextFor(sender.tab, store);
+      return contextFor(sender.tab, store, blockedSubjectsStore);
     case "policy:get-tab":
-      return contextFor(await deps.tabs.get(message.tabId), store);
+      return contextFor(await deps.tabs.get(message.tabId), store, blockedSubjectsStore);
     case "policy:set-tab": {
       const origin = originFor(await deps.tabs.get(message.tabId));
       if (!origin) return { error: "unsupported-page" };

@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mountPopup, type PopupChromeApi } from "../../src/popup/popup";
 
+function policyContext(enabled: boolean) {
+  return {
+    origin: "https://verified.example",
+    mode: "protected" as const,
+    blockedSubjects: { enabled, keywords: ["Donald Trump"] },
+  };
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -15,7 +23,7 @@ function deferred<T>() {
 function createChromeApi(
   sendMessage: PopupChromeApi["runtime"]["sendMessage"] = vi
     .fn()
-    .mockResolvedValue({ origin: "https://verified.example", mode: "protected" }),
+    .mockResolvedValue(policyContext(true)),
 ): PopupChromeApi {
   return {
     tabs: {
@@ -39,7 +47,7 @@ describe("mountPopup", () => {
     root = document.querySelector<HTMLElement>("#app")!;
   });
 
-  it("renders one subject-first switch for the worker-verified hostname", async () => {
+  it("renders one subject-first switch with blocked subjects on everywhere", async () => {
     const chromeApi = createChromeApi();
 
     await mountPopup(root, chromeApi);
@@ -59,15 +67,22 @@ describe("mountPopup", () => {
 
     expect(root.querySelectorAll('[role="switch"]')).toHaveLength(1);
     expect(root.textContent).toContain("Frost ordinary media on verified.example");
-    expect(root.textContent).toContain("Blocked subjects stay frosted");
+    expect(root.textContent).toContain("Blocked subjects — On everywhere");
     expect(getSwitch(root).getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("renders blocked subjects as off when the verified policy context disables them", async () => {
+    await mountPopup(root, createChromeApi(vi.fn().mockResolvedValue(policyContext(false))));
+
+    expect(root.textContent).toContain("Blocked subjects — Off");
+    expect(root.textContent).not.toContain("On everywhere");
   });
 
   it("shows ordinary media for the active tab when the switch is turned off", async () => {
     const chromeApi = createChromeApi(
       vi
         .fn()
-        .mockResolvedValueOnce({ origin: "https://verified.example", mode: "protected" })
+        .mockResolvedValueOnce(policyContext(true))
         .mockResolvedValueOnce({ origin: "https://verified.example", mode: "trusted" }),
     );
     await mountPopup(root, chromeApi);
@@ -90,7 +105,7 @@ describe("mountPopup", () => {
     const chromeApi = createChromeApi(
       vi
         .fn()
-        .mockResolvedValueOnce({ origin: "https://verified.example", mode: "protected" })
+        .mockResolvedValueOnce(policyContext(true))
         .mockResolvedValueOnce({ origin: "https://redirected.example", mode: "trusted" }),
     );
     await mountPopup(root, chromeApi);
@@ -111,7 +126,7 @@ describe("mountPopup", () => {
     const chromeApi = createChromeApi(
       vi
         .fn()
-        .mockResolvedValueOnce({ origin: "https://verified.example", mode: "protected" })
+        .mockResolvedValueOnce(policyContext(true))
         .mockImplementationOnce(() => save.promise),
     );
     await mountPopup(root, chromeApi);
