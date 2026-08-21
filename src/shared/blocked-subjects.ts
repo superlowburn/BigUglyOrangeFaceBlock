@@ -110,8 +110,12 @@ function subjectContext(element: HTMLElement): string {
     link.getAttribute("aria-label") ?? "",
     link.getAttribute("title") ?? "",
   );
-  const container = element.closest("figure, shreddit-post, [data-testid*='post']");
-  if (container) {
+  const containers = new Set([
+    element.closest("figure, shreddit-post, [data-testid*='post']"),
+    element.closest("article"),
+  ]);
+  for (const container of containers) {
+    if (!container) continue;
     values.push(...Array.from(container.querySelectorAll(
       "h1, h2, h3, h4, figcaption, [slot='title'], [slot='post-title']",
     )).map((node) => node.textContent ?? ""));

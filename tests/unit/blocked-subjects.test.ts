@@ -26,6 +26,23 @@ describe("blocked subjects", () => {
     expect(matchesBlockedSubject(article.querySelector("img")!, defaultTrumpKeywords)).toBe(true);
   });
 
+  it("matches a semantic article headline without leaking into a neighboring article", () => {
+    document.body.innerHTML = `
+      <article><div><h3>Foreign Gifts in Trump’s Washington</h3><img alt="Workers unload a crate"></div></article>
+      <article><div><h3>Smithsonian Museum Plan</h3><img alt="Museum exterior"></div></article>`;
+    const images = document.querySelectorAll("img");
+
+    expect(matchesBlockedSubject(images[0]!, defaultTrumpKeywords)).toBe(true);
+    expect(matchesBlockedSubject(images[1]!, defaultTrumpKeywords)).toBe(false);
+  });
+
+  it("uses the article headline when an image is nested inside a figure", () => {
+    document.body.innerHTML = `
+      <article><h3>Foreign Gifts in Trump’s Washington</h3><figure><img alt=""></figure></article>`;
+
+    expect(matchesBlockedSubject(document.querySelector("img")!, defaultTrumpKeywords)).toBe(true);
+  });
+
   it("matches a subject named only in the linked story URL", () => {
     const link = document.createElement("a");
     link.href = "/2026/08/21/politics/donald-trump-south-carolina-republicans";
