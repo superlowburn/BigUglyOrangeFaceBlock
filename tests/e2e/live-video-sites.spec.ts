@@ -312,7 +312,7 @@ async function revealSurfaceForTarget(frame: Frame, target: Locator): Promise<Lo
   for (let index = 0; index < await buttons.count(); index += 1) {
     const button = buttons.nth(index);
     const box = await button.boundingBox().catch(() => null);
-    if (box && overlapRatio(targetBox, box) >= 0.9) return button;
+    if (box && isAlignedTopClippedLayer(targetBox, box)) return button;
   }
   return null;
 }
@@ -341,7 +341,7 @@ async function countOverlappingLayers(frame: Frame, target: Locator, selector: s
   let overlaps = 0;
   for (let index = 0; index < await layers.count(); index += 1) {
     const layerBox = await layers.nth(index).boundingBox().catch(() => null);
-    if (layerBox && overlapRatio(targetBox, layerBox) >= 0.9) overlaps += 1;
+    if (layerBox && isAlignedTopClippedLayer(targetBox, layerBox)) overlaps += 1;
   }
   return overlaps;
 }
@@ -414,6 +414,20 @@ function overlapRatio(
   const width = Math.max(0, Math.min(target.x + target.width, layer.x + layer.width) - Math.max(target.x, layer.x));
   const height = Math.max(0, Math.min(target.y + target.height, layer.y + layer.height) - Math.max(target.y, layer.y));
   return (width * height) / (target.width * target.height);
+}
+
+function isAlignedTopClippedLayer(
+  target: { x: number; y: number; width: number; height: number },
+  layer: { x: number; y: number; width: number; height: number },
+): boolean {
+  const tolerance = 2;
+  return (
+    layer.height > 0 &&
+    layer.y >= target.y - tolerance &&
+    Math.abs(layer.x - target.x) <= tolerance &&
+    Math.abs(layer.width - target.width) <= tolerance &&
+    Math.abs(layer.y + layer.height - (target.y + target.height)) <= tolerance
+  );
 }
 
 async function mediaState(target: Locator): Promise<{ paused: boolean; muted: boolean }> {

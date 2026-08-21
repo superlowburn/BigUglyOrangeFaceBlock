@@ -353,7 +353,14 @@ export class ProtectionRenderer {
       const width = Math.min(controlSize, box.width);
       const height = Math.min(controlSize, box.height);
       const visibleRight = Math.min(box.right, this.window.innerWidth);
-      const visibleTop = Math.max(box.top, 0);
+      const topInset = topEdgeOcclusionInset(
+        this.document,
+        record.candidate.element,
+        record.layer,
+        box,
+        this.window,
+      );
+      const visibleTop = Math.max(box.top + topInset, 0);
       Object.assign(record.layer.style, {
         left: `${Math.max(box.left, visibleRight - width - inset)}px`,
         top: `${Math.max(box.top, Math.min(box.bottom - height, visibleTop + inset))}px`,
@@ -365,14 +372,22 @@ export class ProtectionRenderer {
     if (!record.revealed && layerCompact(record.layer) !== compact) {
       this.renderProtected(record, box);
     }
+    const topInset = topEdgeOcclusionInset(
+      this.document,
+      record.candidate.element,
+      record.layer,
+      box,
+      this.window,
+    );
+    const clippedTop = box.top + topInset;
     Object.assign(record.layer.style, {
       left: `${box.left}px`,
-      top: `${box.top}px`,
+      top: `${clippedTop}px`,
       width: `${box.width}px`,
-      height: `${box.height}px`,
+      height: `${Math.max(0, box.height - topInset)}px`,
     });
     record.layer.style.setProperty("--eg-control-right", `${Math.max(inset, box.right - this.window.innerWidth + inset)}px`);
-    record.layer.style.setProperty("--eg-control-top", `${Math.max(inset, inset - box.top)}px`);
+    record.layer.style.setProperty("--eg-control-top", `${Math.max(inset, inset - clippedTop)}px`);
     record.layer.style.setProperty("--eg-caption-left", `${Math.max(inset, inset - box.left)}px`);
     record.layer.style.setProperty("--eg-caption-bottom", `${inset}px`);
     record.layer.classList.toggle("eg-compact", compact);
@@ -438,6 +453,87 @@ export class ProtectionRenderer {
     if (this.frame !== null) this.cancelFrame(this.frame);
     this.frame = null;
   }
+}
+
+function topEdgeOcclusionInset(
+  document: Document,
+  target: HTMLElement,
+  layer: HTMLElement,
+  box: DOMRect,
+  window: Window,
+): number {
+  if (typeof document.elementFromPoint !== "function") return 0;
+  const visibleLeft = Math.max(0, box.left);
+  const visibleRight = Math.min(window.innerWidth, box.right);
+  const visibleTop = Math.max(0, box.top);
+  const visibleBottom = Math.min(window.innerHeight, box.bottom);
+  if (visibleLeft >= visibleRight || visibleTop >= visibleBottom) return 0;
+
+  const priorPointerEvents = layer.style.pointerEvents;
+  let underlying: Element | null = null;
+  try {
+    layer.style.pointerEvents = "none";
+    underlying = deepElementFromPoint(
+      document,
+      (visibleLeft + visibleRight) / 2,
+      Math.min(visibleBottom - 1, visibleTop + 1),
+    );
+  } finally {
+    layer.style.pointerEvents = priorPointerEvents;
+  }
+
+  let current = underlying instanceof HTMLElement ? underlying : underlying?.parentElement ?? null;
+  while (current && current !== document.documentElement) {
+    if (
+      !isGogglesElement(current) &&
+      current !== target &&
+      !current.contains(target) &&
+      !target.contains(current)
+    ) {
+      const position = window.getComputedStyle(current).position;
+      if (position === "fixed" || position === "sticky") {
+        const occluder = current.getBoundingClientRect();
+        if (
+          occluder.left <= visibleLeft + 1 &&
+          occluder.right >= visibleRight - 1 &&
+          occluder.top <= visibleTop + 1 &&
+          occluder.bottom > visibleTop + 1 &&
+          occluder.height <= Math.min(120, (visibleBottom - visibleTop) / 2)
+        ) {
+          return Math.min(box.height, Math.max(0, occluder.bottom - box.top));
+        }
+      }
+    }
+    current = composedParent(current);
+  }
+  return 0;
+}
+
+function deepElementFromPoint(document: Document, x: number, y: number): Element | null {
+  let current = document.elementFromPoint(x, y);
+  while (current?.shadowRoot) {
+    const shadow = current.shadowRoot as ShadowRoot & {
+      elementFromPoint?(x: number, y: number): Element | null;
+    };
+    const nested = shadow.elementFromPoint?.(x, y) ?? null;
+    if (!nested || nested === current) break;
+    current = nested;
+  }
+  return current;
+}
+
+function composedParent(element: HTMLElement): HTMLElement | null {
+  if (element.parentElement) return element.parentElement;
+  const root = element.getRootNode();
+  return root instanceof ShadowRoot && root.host instanceof HTMLElement ? root.host : null;
+}
+
+function isGogglesElement(element: HTMLElement): boolean {
+  if (element.closest("[data-eclipse-goggles-root]")) return true;
+  const root = element.getRootNode();
+  return root instanceof ShadowRoot &&
+    root.host instanceof HTMLElement &&
+    root.host.hasAttribute("data-eclipse-goggles-root");
 }
 
 function mediaLabel(kind: MediaKind): "image" | "video" {
