@@ -39,6 +39,7 @@ interface RenderedItem {
   candidate: MediaCandidate;
   options: ProtectionOptions;
   handle: ProtectionHandle;
+  isRemoved(): boolean;
 }
 
 function rendererHarness() {
@@ -64,12 +65,19 @@ function rendererHarness() {
       setDescriptionVisible: vi.fn(),
       isRevealed: () => revealed,
     };
-    items.push({ candidate, options, handle });
+    items.push({ candidate, options, handle, isRemoved: () => removed });
     return handle;
   });
   const showSiteAllowedControl = vi.fn();
   const hideSiteAllowedControl = vi.fn();
-  return { protect, items, showSiteAllowedControl, hideSiteAllowedControl };
+  return {
+    protect,
+    items,
+    activeFor: (element: HTMLElement) =>
+      items.filter((item) => item.candidate.element === element && !item.isRemoved()),
+    showSiteAllowedControl,
+    hideSiteAllowedControl,
+  };
 }
 
 function candidate(element: HTMLElement, kind: MediaKind): MediaCandidate {
@@ -172,6 +180,104 @@ describe("ContentController", () => {
       candidate(trump, "image"),
       expect.objectContaining({ mode: "trusted" }),
     );
+  });
+
+  it("keeps matching subjects protected while a site becomes Trusted", () => {
+    const blockedImage = document.createElement("img");
+    blockedImage.alt = "Donald Trump at a campaign event";
+    const ordinaryImage = document.createElement("img");
+    ordinaryImage.alt = "A quiet lake";
+    document.body.append(blockedImage, ordinaryImage);
+    const blockedSubjects = { enabled: true, keywords: ["Trump"] };
+    const harness = controllerHarness(new Map([
+      [blockedImage, candidate(blockedImage, "image")],
+      [ordinaryImage, candidate(ordinaryImage, "image")],
+    ]));
+
+    harness.controller.start({
+      origin: "https://news.example",
+      mode: "protected",
+      blockedSubjects,
+    });
+    harness.observer.emit([blockedImage, ordinaryImage]);
+    harness.controller.applyMode("trusted");
+
+    expect(harness.renderer.activeFor(blockedImage)).toHaveLength(1);
+    expect(harness.renderer.activeFor(ordinaryImage)).toHaveLength(0);
+  });
+
+  it("adds ordinary media when a Trusted site becomes Protected without duplicating subjects", () => {
+    const blockedImage = document.createElement("img");
+    blockedImage.alt = "Donald Trump at a campaign event";
+    const ordinaryImage = document.createElement("img");
+    ordinaryImage.alt = "A quiet lake";
+    document.body.append(blockedImage, ordinaryImage);
+    const harness = controllerHarness(new Map([
+      [blockedImage, candidate(blockedImage, "image")],
+      [ordinaryImage, candidate(ordinaryImage, "image")],
+    ]));
+
+    harness.controller.start({
+      origin: "https://news.example",
+      mode: "trusted",
+      blockedSubjects: { enabled: true, keywords: ["Trump"] },
+    });
+    harness.observer.emit([blockedImage, ordinaryImage]);
+    harness.controller.applyMode("protected");
+    harness.observer.emit([blockedImage, ordinaryImage]);
+
+    expect(harness.renderer.activeFor(blockedImage)).toHaveLength(1);
+    expect(harness.renderer.activeFor(ordinaryImage)).toHaveLength(1);
+  });
+
+  it("reconciles subject preference changes without replacing matching records", () => {
+    const blockedImage = document.createElement("img");
+    blockedImage.alt = "Donald Trump at a campaign event";
+    const ordinaryImage = document.createElement("img");
+    ordinaryImage.alt = "A quiet lake";
+    document.body.append(blockedImage, ordinaryImage);
+    const enabled = { enabled: true, keywords: ["Trump"] };
+    const disabled = { enabled: false, keywords: ["Trump"] };
+    const harness = controllerHarness(new Map([
+      [blockedImage, candidate(blockedImage, "image")],
+      [ordinaryImage, candidate(ordinaryImage, "image")],
+    ]));
+
+    harness.controller.start({
+      origin: "https://news.example",
+      mode: "trusted",
+      blockedSubjects: disabled,
+    });
+    harness.observer.emit([blockedImage, ordinaryImage]);
+    harness.controller.applyBlockedSubjects(enabled);
+    harness.observer.emit([blockedImage, ordinaryImage]);
+    const matchingRecord = harness.renderer.activeFor(blockedImage)[0];
+    harness.controller.applyBlockedSubjects(enabled);
+    harness.observer.emit([blockedImage, ordinaryImage]);
+
+    expect(harness.renderer.activeFor(blockedImage)[0]).toBe(matchingRecord);
+    expect(harness.renderer.activeFor(ordinaryImage)).toHaveLength(0);
+    harness.controller.applyBlockedSubjects(disabled);
+    expect(harness.renderer.activeFor(blockedImage)).toHaveLength(0);
+  });
+
+  it("protects matching subject media discovered after a Trusted site starts", () => {
+    const blockedImage = document.createElement("img");
+    blockedImage.alt = "Donald Trump at a campaign event";
+    const harness = controllerHarness(new Map([
+      [blockedImage, candidate(blockedImage, "image")],
+    ]));
+
+    harness.controller.start({
+      origin: "https://news.example",
+      mode: "trusted",
+      blockedSubjects: { enabled: true, keywords: ["Trump"] },
+    });
+    document.body.append(blockedImage);
+    harness.observer.emit([blockedImage]);
+    harness.observer.emit([blockedImage]);
+
+    expect(harness.renderer.activeFor(blockedImage)).toHaveLength(1);
   });
 
   it("classifies, describes, and protects one discovered candidate", () => {

@@ -143,19 +143,10 @@ export class ContentController {
   applyMode(mode: SiteMode): void {
     if (!this.started || mode === this.mode) return;
 
-    if (mode === "trusted") {
+    if (this.mode === "trusted" || mode === "trusted") {
       this.mode = mode;
       this.syncSiteControl();
-      this.clearProtection();
-      this.observer.scan(this.document);
-      return;
-    }
-
-    if (this.mode === "trusted") {
-      this.mode = mode;
-      this.syncSiteControl();
-      this.startObservation();
-      this.observer.scan(this.document);
+      this.reconcileProtection();
       return;
     }
 
@@ -180,9 +171,7 @@ export class ContentController {
 
   applyBlockedSubjects(config: BlockedSubjectsConfig): void {
     this.blockedSubjects = parseBlockedSubjects(config);
-    if (!this.started || this.mode !== "trusted") return;
-    this.clearProtection();
-    this.observer.scan(this.document);
+    if (this.started) this.reconcileProtection();
   }
 
   stop(options: { restoreMedia?: boolean } = {}): void {
@@ -422,6 +411,20 @@ export class ContentController {
         this.providerFrames.forget?.(record.candidate.element);
       }
     }
+  }
+
+  private reconcileProtection(): void {
+    for (const record of [...this.records]) {
+      if (!record.candidate.element.isConnected || !this.requiresProtection(record.candidate)) {
+        this.detachRecord(record, true);
+      }
+    }
+    this.observer.scan(this.document);
+  }
+
+  private requiresProtection(candidate: MediaCandidate): boolean {
+    return this.mode !== "trusted" ||
+      candidateMatchesBlockedSubject(candidate, this.blockedSubjects);
   }
 
   private reportCandidateFailure(element: Element): void {
