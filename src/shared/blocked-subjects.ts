@@ -49,8 +49,7 @@ export function matchesBlockedSubject(
   element: HTMLElement,
   keywords: readonly string[],
 ): boolean {
-  const text = subjectContext(element);
-  return keywords.some((keyword) => subjectPattern(keyword).test(text));
+  return textMatchesBlockedSubject(subjectContext(element), keywords);
 }
 
 export function candidateMatchesBlockedSubject(
@@ -59,7 +58,11 @@ export function candidateMatchesBlockedSubject(
 ): boolean {
   return config.enabled &&
     isSubjectCandidate(candidate) &&
-    matchesBlockedSubject(candidate.element, config.keywords);
+    (matchesBlockedSubject(candidate.element, config.keywords) ||
+      (candidate.kind === "background-image" && textMatchesBlockedSubject(
+        candidate.element.ownerDocument.defaultView?.getComputedStyle(candidate.element).backgroundImage ?? "",
+        config.keywords,
+      )));
 }
 
 export class BlockedSubjectsStore {
@@ -102,7 +105,11 @@ function subjectContext(element: HTMLElement): string {
   const values = ["alt", "aria-label", "title", "src", "data-src", "poster"]
     .map((name) => element.getAttribute(name) ?? "");
   const link = element.closest("a[href]");
-  if (link) values.push(link.getAttribute("aria-label") ?? "", link.getAttribute("title") ?? "");
+  if (link) values.push(
+    link.getAttribute("href") ?? "",
+    link.getAttribute("aria-label") ?? "",
+    link.getAttribute("title") ?? "",
+  );
   const container = element.closest("figure, shreddit-post, [data-testid*='post']");
   if (container) {
     values.push(...Array.from(container.querySelectorAll(
@@ -122,4 +129,8 @@ function isSubjectCandidate(candidate: MediaCandidate): boolean {
 function subjectPattern(keyword: string): RegExp {
   const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
   return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}($|[^\\p{L}\\p{N}])`, "iu");
+}
+
+function textMatchesBlockedSubject(text: string, keywords: readonly string[]): boolean {
+  return keywords.some((keyword) => subjectPattern(keyword).test(text));
 }

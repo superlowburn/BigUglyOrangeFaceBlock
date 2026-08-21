@@ -42,11 +42,13 @@
               <input id="blocked-subjects-enabled" type="checkbox">
             </label>
             <p class="subject-explainer">Goggles checks image descriptions, filenames, captions, and nearby titles. It may miss images or frost unrelated ones. Images stay on this device.</p>
-            <label class="keyword-editor" for="blocked-subject-keywords">
-              <strong>Words to look for</strong>
-              <span>One phrase per line.</span>
-              <textarea id="blocked-subject-keywords" rows="7" spellcheck="false"></textarea>
-            </label>
+            <details class="keyword-editor">
+              <summary>Matching words</summary>
+              <label for="blocked-subject-keywords">
+                <span>One phrase per line.</span>
+                <textarea id="blocked-subject-keywords" rows="7" spellcheck="false"></textarea>
+              </label>
+            </details>
           </div>
           <p id="blocked-subjects-status" class="save-status" aria-live="polite"></p>
         </div>

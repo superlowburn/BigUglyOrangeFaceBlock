@@ -31,6 +31,11 @@ export function isSiteMode(value: unknown): value is SiteMode {
   return value === "trusted" || value === "protected" || value === "strict";
 }
 
+function supportedMode(value: unknown): SiteMode | null {
+  if (value === "strict") return "protected";
+  return value === "trusted" || value === "protected" ? value : null;
+}
+
 export class SitePolicyStore {
   constructor(
     private readonly area: StorageArea,
@@ -42,16 +47,15 @@ export class SitePolicyStore {
     const values = await this.area.get([key, defaultPolicyKey]);
     const value = values[key];
 
-    if (isSiteMode(value)) return value;
-    return isSiteMode(values[defaultPolicyKey]) ? values[defaultPolicyKey] : defaultMode;
+    return supportedMode(value) ?? supportedMode(values[defaultPolicyKey]) ?? defaultMode;
   }
 
   async set(origin: string, mode: SiteMode): Promise<void> {
-    await this.area.set({ [policyKey(origin)]: mode });
+    await this.area.set({ [policyKey(origin)]: supportedMode(mode) ?? defaultMode });
   }
 
   async setDefault(mode: Exclude<SiteMode, "trusted">): Promise<void> {
-    await this.area.set({ [defaultPolicyKey]: mode });
+    await this.area.set({ [defaultPolicyKey]: supportedMode(mode) ?? defaultMode });
   }
 
   async getDescriptionsVisible(origin: string): Promise<boolean> {
@@ -68,7 +72,7 @@ export class SitePolicyStore {
     const onChange: StorageChangeListener = (changes, areaName) => {
       if (areaName !== "local" || !(key in changes)) return;
 
-      listener(isSiteMode(changes[key]?.newValue) ? changes[key].newValue : defaultMode);
+      listener(supportedMode(changes[key]?.newValue) ?? defaultMode);
     };
 
     this.onChanged?.addListener(onChange);

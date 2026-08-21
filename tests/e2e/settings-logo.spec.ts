@@ -122,6 +122,14 @@ test("makes the blocked-subject controls and small labels visually clear", async
     await expect(page.getByRole("heading", { name: "Blocked subjects" })).toBeVisible();
     await expect(page.locator("#blocked-subjects-enabled")).toBeVisible();
     await expect(page.getByText("Default for new sites")).toHaveCount(0);
+    const keywordEditor = page.locator(".keyword-editor");
+    await expect(keywordEditor).not.toHaveAttribute("open", "");
+    await expect(page.getByText("Matching words", { exact: true })).toBeVisible();
+    await expect(page.locator("#blocked-subject-keywords")).not.toBeVisible();
+
+    await page.getByText("Matching words", { exact: true }).click();
+    await expect(keywordEditor).toHaveAttribute("open", "");
+    await expect(page.locator("#blocked-subject-keywords")).toBeVisible();
 
     const labelContrast = await page.locator(".section-number").first().evaluate((label) => {
       const parse = (color: string): number[] => color.match(/[\d.]+/gu)?.slice(0, 3).map(Number) ?? [];

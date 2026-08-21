@@ -13,14 +13,14 @@ describe("SitePolicyStore", () => {
     await expect(store.get("https://example.com")).resolves.toBe("protected");
   });
 
-  it("stores one validated mode by origin", async () => {
+  it("converts the removed strict mode to protected", async () => {
     const area = { get: vi.fn(), set: vi.fn().mockResolvedValue(undefined) };
     const store = new SitePolicyStore(area);
 
     await store.set("https://example.com", "strict");
 
     expect(area.set).toHaveBeenCalledWith({
-      [policyKey("https://example.com")]: "strict",
+      [policyKey("https://example.com")]: "protected",
     });
   });
 
@@ -31,7 +31,7 @@ describe("SitePolicyStore", () => {
     };
     const store = new SitePolicyStore(area);
 
-    await expect(store.get("https://example.com")).resolves.toBe("strict");
+    await expect(store.get("https://example.com")).resolves.toBe("protected");
   });
 
   it("keeps an origin rule ahead of the configured default", async () => {
@@ -47,13 +47,13 @@ describe("SitePolicyStore", () => {
     await expect(store.get("https://example.com")).resolves.toBe("trusted");
   });
 
-  it("stores a protected or strict default for new sites", async () => {
+  it("stores strict defaults as protected", async () => {
     const area = { get: vi.fn(), set: vi.fn().mockResolvedValue(undefined) };
     const store = new SitePolicyStore(area);
 
     await store.setDefault("strict");
 
-    expect(area.set).toHaveBeenCalledWith({ [defaultPolicyKey]: "strict" });
+    expect(area.set).toHaveBeenCalledWith({ [defaultPolicyKey]: "protected" });
   });
 
   it("defaults site descriptions to hidden and restores a saved preference", async () => {

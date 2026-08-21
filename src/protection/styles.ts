@@ -40,6 +40,33 @@ export const protectionStyles = `
   cursor: pointer;
 }
 
+.eg-show-cue {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  padding: 5px 9px;
+  color: #fff;
+  border-radius: 999px;
+  background: rgba(31, 33, 35, 0.82);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+  opacity: 0;
+  transform: translateX(-50%);
+  transition: opacity 120ms ease;
+  pointer-events: none;
+  font: 600 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.eg-reveal-surface:hover .eg-show-cue,
+.eg-reveal-surface:focus-visible .eg-show-cue {
+  opacity: 1;
+}
+
+.eg-compact .eg-show-cue {
+  bottom: 6px;
+  padding: 4px 7px;
+  font-size: 11px;
+}
+
 .eg-info-control {
   position: absolute;
   left: var(--eg-caption-left, 12px);

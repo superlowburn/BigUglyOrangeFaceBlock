@@ -181,7 +181,7 @@ h2 {
 }
 .subject-toggle span { display: grid; gap: 3px; }
 .subject-toggle small,
-.keyword-editor > span { color: var(--muted); }
+.keyword-editor label > span { color: var(--muted); }
 .subject-toggle input {
   appearance: none;
   position: relative;
@@ -216,9 +216,18 @@ h2 {
   font-size: 14px;
 }
 .keyword-editor {
+  padding: 14px 22px 18px;
+  border-top: 1px solid var(--line);
+}
+.keyword-editor summary {
+  padding: 6px 0;
+  cursor: pointer;
+  font-weight: 700;
+}
+.keyword-editor label {
   display: grid;
   gap: 6px;
-  padding: 20px 22px 22px;
+  padding-top: 12px;
 }
 .keyword-editor textarea {
   width: 100%;

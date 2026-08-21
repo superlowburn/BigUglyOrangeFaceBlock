@@ -127,7 +127,7 @@ export async function handleExtensionMessage(
       if (origin !== message.expectedOrigin) return { error: "origin-changed" };
 
       await store.set(origin, message.mode);
-      return { origin, mode: message.mode };
+      return { origin, mode: message.mode === "strict" ? "protected" : message.mode };
     }
     case "provider:authorize": {
       const tabId = sender.tab?.id;

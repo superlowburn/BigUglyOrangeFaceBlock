@@ -147,6 +147,40 @@ describe("ProtectionRenderer", () => {
       .toBe("Reveal blocked subject: A black audio component");
   });
 
+  it("updates the blocked-subject reason without replacing the reveal surface", () => {
+    const image = document.createElement("img");
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(20, 30, 640, 360));
+    document.body.append(image);
+    const renderer = new ProtectionRenderer();
+    const handle = protect(renderer, image);
+    const originalSurface = renderer.debugLayerFor(image)?.querySelector(".eg-reveal-surface");
+
+    (handle as ProtectionHandle & { setBlockedSubject(blocked: boolean): void })
+      .setBlockedSubject(true);
+
+    expect(renderer.debugLayerFor(image)?.querySelector(".eg-reveal-surface")).toBe(originalSurface);
+    expect(originalSurface?.getAttribute("aria-label"))
+      .toBe("Reveal blocked subject: A black audio component");
+
+    (handle as ProtectionHandle & { setBlockedSubject(blocked: boolean): void })
+      .setBlockedSubject(false);
+    expect(originalSurface?.getAttribute("aria-label"))
+      .toBe("Reveal protected media: A black audio component");
+  });
+
+  it("renders a quiet Show cue inside the reveal surface", () => {
+    const image = document.createElement("img");
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(20, 30, 640, 360));
+    document.body.append(image);
+    const renderer = new ProtectionRenderer();
+
+    protect(renderer, image);
+
+    const cue = renderer.debugLayerFor(image)?.querySelector(".eg-show-cue");
+    expect(cue?.textContent).toBe("Show");
+    expect(cue?.getAttribute("aria-hidden")).toBe("true");
+  });
+
   it("keeps a blocked image frosted beneath an overlapping iframe", () => {
     const image = document.createElement("img");
     const frame = document.createElement("iframe");
@@ -349,6 +383,39 @@ describe("ProtectionRenderer", () => {
     expect(first.hasAttribute("data-eclipse-goggles-protected")).toBe(false);
     expect(secondHandle.isRevealed()).toBe(false);
     expect(second.getAttribute("data-eclipse-goggles-protected")).toBe("image");
+  });
+
+  it("moves keyboard focus from Reveal to Frost again", () => {
+    const image = document.createElement("img");
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(0, 0, 640, 360));
+    document.body.append(image);
+    const renderer = new ProtectionRenderer({ trustedActivation: () => true });
+    protect(renderer, image);
+    const layer = renderer.debugLayerFor(image)!;
+    const shadow = layer.getRootNode() as ShadowRoot;
+    const reveal = layer.querySelector<HTMLButtonElement>(".eg-reveal-surface")!;
+
+    reveal.focus();
+    reveal.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    expect(shadow.activeElement).toBe(layer.querySelector(".eg-reprotect"));
+  });
+
+  it("moves keyboard focus from Frost again back to Reveal", () => {
+    const image = document.createElement("img");
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(0, 0, 640, 360));
+    document.body.append(image);
+    const renderer = new ProtectionRenderer({ trustedActivation: () => true });
+    const handle = protect(renderer, image);
+    const layer = renderer.debugLayerFor(image)!;
+    const shadow = layer.getRootNode() as ShadowRoot;
+    handle.reveal();
+    const reprotect = layer.querySelector<HTMLButtonElement>(".eg-reprotect")!;
+
+    reprotect.focus();
+    reprotect.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    expect(shadow.activeElement).toBe(layer.querySelector(".eg-reveal-surface"));
   });
 
   it("rejects page-dispatched synthetic pointer activation", () => {

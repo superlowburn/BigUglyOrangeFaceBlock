@@ -37,6 +37,13 @@ test("applies popup-equivalent site and subject changes live without reloading",
     const ordinaryReveal = page.getByRole("button", { name: /Reveal protected media:/u });
     await expect(blockedReveal).toHaveCount(1);
     await expect(ordinaryReveal).toHaveCount(1);
+    const showCue = ordinaryReveal.locator(".eg-show-cue");
+    await expect(showCue).toHaveCSS("opacity", "0");
+    await ordinaryReveal.focus();
+    await expect(showCue).toHaveCSS("opacity", "1");
+    await ordinaryReveal.screenshot({
+      path: resolve(".gstack/qa-reports/screenshots/subject-first/show-cue-focus.png"),
+    });
 
     // Popup unit coverage proves the real switch sends this exact storage-backed
     // transition and rolls back on failure. This loaded-extension assertion owns

@@ -26,6 +26,26 @@ describe("blocked subjects", () => {
     expect(matchesBlockedSubject(article.querySelector("img")!, defaultTrumpKeywords)).toBe(true);
   });
 
+  it("matches a subject named only in the linked story URL", () => {
+    const link = document.createElement("a");
+    link.href = "/2026/08/21/politics/donald-trump-south-carolina-republicans";
+    const image = document.createElement("img");
+    image.alt = "Sen. Darline Graham at a campaign event";
+    link.append(image);
+
+    expect(matchesBlockedSubject(image, defaultTrumpKeywords)).toBe(true);
+  });
+
+  it("matches a background-image candidate named only in its image URL", () => {
+    const card = document.createElement("div");
+    card.style.backgroundImage = 'url("https://cdn.example/donald-trump-rally.jpg")';
+
+    expect(candidateMatchesBlockedSubject(
+      { element: card, kind: "background-image" },
+      { enabled: true, keywords: ["Trump"] },
+    )).toBe(true);
+  });
+
   it("matches supported video candidates from local poster and title evidence", () => {
     const nativeVideo = document.createElement("video");
     nativeVideo.poster = "donald-trump-campaign.jpg";

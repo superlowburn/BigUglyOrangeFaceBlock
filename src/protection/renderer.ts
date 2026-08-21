@@ -7,6 +7,7 @@ export interface ProtectionHandle {
   reprotect(): void;
   remove(): void;
   update(): void;
+  setBlockedSubject(blocked: boolean): void;
   setDescriptionVisible(visible: boolean): void;
   isRevealed(): boolean;
 }
@@ -95,6 +96,7 @@ export class ProtectionRenderer {
       reprotect: () => this.reprotect(record),
       remove: () => this.remove(record),
       update: () => this.scheduleRecordUpdate(record),
+      setBlockedSubject: (blocked) => this.setRecordBlockedSubject(record, blocked),
       setDescriptionVisible: (visible) => this.setRecordDescriptionVisible(record, visible),
       isRevealed: () => record.revealed,
     };
@@ -174,11 +176,14 @@ export class ProtectionRenderer {
 
   private reveal(record: ProtectionRecord): void {
     if (record.removed || record.revealed) return;
+    const keepFocus = (record.layer.getRootNode() as ShadowRoot).activeElement ===
+      record.layer.querySelector(".eg-reveal-surface");
     record.revealed = true;
     record.layer.className = "eg-layer eg-revealed";
     const reprotect = this.createIconButton("eg-reprotect", "Frost again", "undo");
     reprotect.addEventListener("click", (event) => this.activate(record, event, "reprotect"));
     record.layer.replaceChildren(reprotect);
+    if (keepFocus) reprotect.focus();
     record.candidate.element.removeAttribute("data-eclipse-goggles-protected");
     record.onReveal();
     this.updateRecord(record);
@@ -191,10 +196,13 @@ export class ProtectionRenderer {
 
   private reprotect(record: ProtectionRecord): void {
     if (record.removed || !record.revealed) return;
+    const keepFocus = (record.layer.getRootNode() as ShadowRoot).activeElement ===
+      record.layer.querySelector(".eg-reprotect");
     record.revealed = false;
     record.stopStrictWatch?.();
     record.stopStrictWatch = null;
     this.renderProtected(record);
+    if (keepFocus) record.layer.querySelector<HTMLButtonElement>(".eg-reveal-surface")?.focus();
     this.updateRecord(record);
     markProtected(record.candidate);
     record.onReprotect();
@@ -213,6 +221,11 @@ export class ProtectionRenderer {
       "eg-reveal-surface",
       `${optionsLabel(record)}: ${description}`,
     );
+    const showCue = this.document.createElement("span");
+    showCue.className = "eg-show-cue";
+    showCue.setAttribute("aria-hidden", "true");
+    showCue.textContent = "Show";
+    revealSurface.append(showCue);
     revealSurface.addEventListener("click", (event) => {
       this.activate(record, event, "reveal");
     });
@@ -310,6 +323,15 @@ export class ProtectionRenderer {
     record.descriptionVisible = visible;
     record.pageDescriptionsVisible = visible;
     this.updateDescriptionState(record);
+  }
+
+  private setRecordBlockedSubject(record: ProtectionRecord, blocked: boolean): void {
+    if (record.blockedSubject === blocked) return;
+    record.blockedSubject = blocked;
+    record.layer.querySelector(".eg-reveal-surface")?.setAttribute(
+      "aria-label",
+      `${optionsLabel(record)}: ${record.description}`,
+    );
   }
 
   private isCompact(record: ProtectionRecord, currentBox?: DOMRect): boolean {

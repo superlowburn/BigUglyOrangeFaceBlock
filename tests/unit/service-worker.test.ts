@@ -65,10 +65,10 @@ describe("handleExtensionMessage", () => {
         {},
         deps,
       ),
-    ).toEqual({ origin: "https://news.example", mode: "strict" });
+    ).toEqual({ origin: "https://news.example", mode: "protected" });
     expect(deps.tabs.get).toHaveBeenCalledWith(7);
     expect(deps.storage.set).toHaveBeenCalledWith({
-      "site-policy:https://news.example": "strict",
+      "site-policy:https://news.example": "protected",
     });
   });
 

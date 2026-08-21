@@ -405,16 +405,14 @@ export class ContentController {
 
   private reconcileProtection(): void {
     for (const record of [...this.records]) {
-      if (!record.candidate.element.isConnected || !this.requiresProtection(record.candidate)) {
+      const blockedSubject = candidateMatchesBlockedSubject(record.candidate, this.blockedSubjects);
+      if (!record.candidate.element.isConnected || (this.mode === "trusted" && !blockedSubject)) {
         this.detachRecord(record, true);
+      } else {
+        record.handle.setBlockedSubject(blockedSubject);
       }
     }
     this.observer.scan(this.document);
-  }
-
-  private requiresProtection(candidate: MediaCandidate): boolean {
-    return this.mode !== "trusted" ||
-      candidateMatchesBlockedSubject(candidate, this.blockedSubjects);
   }
 
   private reportCandidateFailure(element: Element): void {

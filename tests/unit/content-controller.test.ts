@@ -64,7 +64,10 @@ function rendererHarness() {
       update: vi.fn(),
       setDescriptionVisible: vi.fn(),
       isRevealed: () => revealed,
-    };
+      setBlockedSubject: vi.fn((blocked: boolean) => {
+        options.blockedSubject = blocked;
+      }),
+    } as ProtectionHandle;
     items.push({ candidate, options, handle, isRemoved: () => removed });
     return handle;
   });
@@ -336,6 +339,34 @@ describe("ContentController", () => {
     expect(harness.renderer.activeFor(ordinaryImage)).toHaveLength(0);
     harness.controller.applyBlockedSubjects(disabled);
     expect(harness.renderer.activeFor(blockedImage)).toHaveLength(0);
+  });
+
+  it("updates a retained protected record's subject reason without losing its reveal", () => {
+    const image = document.createElement("img");
+    image.alt = "Donald Trump at a campaign event";
+    document.body.append(image);
+    const harness = controllerHarness(new Map([[image, candidate(image, "image")]]));
+    harness.controller.start({
+      origin: "https://news.example",
+      mode: "protected",
+      blockedSubjects: { enabled: false, keywords: ["Trump"] },
+    });
+    harness.observer.emit([image]);
+    const record = harness.renderer.activeFor(image)[0]!;
+    record.handle.reveal();
+
+    harness.controller.applyBlockedSubjects({ enabled: true, keywords: ["Trump"] });
+
+    expect(harness.renderer.activeFor(image)[0]).toBe(record);
+    expect(record.handle.isRevealed()).toBe(true);
+    expect((record.handle as ProtectionHandle & { setBlockedSubject: ReturnType<typeof vi.fn> })
+      .setBlockedSubject).toHaveBeenLastCalledWith(true);
+
+    harness.controller.applyBlockedSubjects({ enabled: false, keywords: ["Trump"] });
+    expect(harness.renderer.activeFor(image)[0]).toBe(record);
+    expect(record.handle.isRevealed()).toBe(true);
+    expect((record.handle as ProtectionHandle & { setBlockedSubject: ReturnType<typeof vi.fn> })
+      .setBlockedSubject).toHaveBeenLastCalledWith(false);
   });
 
   it("protects matching subject media discovered after a Trusted site starts", () => {

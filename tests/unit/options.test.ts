@@ -90,4 +90,19 @@ describe("mountOptions", () => {
       expect(document.querySelector("#blocked-subjects-status")?.textContent).toBe("Saved locally");
     });
   });
+
+  it("keeps matching words in a native expandable editor", async () => {
+    await mountOptions(document.querySelector("#app")!, chromeApi({}));
+
+    const disclosure = document.querySelector<HTMLDetailsElement>(".keyword-editor");
+    const summary = disclosure?.querySelector("summary");
+    const keywords = disclosure?.querySelector<HTMLTextAreaElement>("#blocked-subject-keywords");
+
+    expect(disclosure?.open).toBe(false);
+    expect(summary?.textContent).toContain("Matching words");
+    expect(keywords?.labels?.[0]?.textContent).toContain("One phrase per line");
+
+    summary?.click();
+    expect(disclosure?.open).toBe(true);
+  });
 });
