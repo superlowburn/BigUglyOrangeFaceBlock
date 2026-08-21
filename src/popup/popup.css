@@ -26,26 +26,11 @@ body {
   letter-spacing: -0.025em;
 }
 
-.popup-hostname {
-  min-height: 18px;
-  margin: 4px 0 16px;
-  overflow: hidden;
-  color: #67696d;
-  font-size: 13px;
-  line-height: 18px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mode-group {
-  display: grid;
-  gap: 8px;
-}
-
-.mode-button {
+.popup-switch {
+  position: relative;
   display: grid;
   width: 100%;
-  padding: 11px 12px;
+  padding: 11px 38px 11px 12px;
   border: 1px solid #d5d5d1;
   border-radius: 10px;
   color: inherit;
@@ -56,34 +41,39 @@ body {
   transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
 }
 
-.mode-button:hover:not(:disabled) {
+.popup-switch:hover:not(:disabled) {
   border-color: #a9aaa6;
   background: #fafaf8;
 }
 
-.mode-button[aria-pressed="true"] {
+.popup-switch[aria-checked="true"] {
   border-color: #5c625f;
   background: #e7e9e6;
-  box-shadow: inset 3px 0 #434946;
+  box-shadow: none;
 }
 
-.mode-button:disabled {
+.popup-switch[aria-checked="true"]::after {
+  content: "✓";
+  position: absolute;
+  top: 50%;
+  right: 13px;
+  transform: translateY(-50%);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.popup-switch:disabled {
   cursor: wait;
   opacity: 0.72;
 }
 
-.mode-button:focus-visible {
+.popup-switch:focus-visible {
   outline: 3px solid #2368d1;
   outline-offset: 2px;
 }
 
-.mode-label {
-  font-size: 14px;
-  font-weight: 680;
-  line-height: 19px;
-}
-
-.mode-description {
+.popup-subjects {
+  margin: 10px 0 0;
   color: #666a68;
   font-size: 12px;
   line-height: 17px;
@@ -101,8 +91,23 @@ body {
   display: none;
 }
 
+.popup-settings {
+  width: 100%;
+  margin-top: 14px;
+  padding: 10px 0 0;
+  color: #424846;
+  border: 0;
+  border-top: 1px solid #d5d5d1;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .mode-button {
+  .popup-switch {
     transition: none;
   }
 }

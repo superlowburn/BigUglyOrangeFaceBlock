@@ -9,25 +9,13 @@ export interface PopupChromeApi {
   };
   runtime: {
     sendMessage(message: ExtensionMessage): Promise<unknown>;
+    openOptionsPage(): Promise<void>;
   };
 }
 
-type ModeOption = {
-  mode: SiteMode;
-  label: string;
-  description: string;
-};
-
 const TITLE = "Goggles";
-const GROUP_LABEL = "Image protection for this site";
 const SAVE_ERROR = "Could not update protection. Try again.";
 const START_ERROR = "Protection settings are unavailable on this page.";
-
-const MODES: readonly ModeOption[] = [
-  { mode: "trusted", label: "Trusted", description: "Show normally" },
-  { mode: "protected", label: "Protected", description: "Frost individually" },
-  { mode: "strict", label: "Strict", description: "Always re-protect" },
-];
 
 function isPolicyContext(value: unknown): value is PolicyContext {
   return (
@@ -55,17 +43,18 @@ export async function mountPopup(root: HTMLElement, chromeApi: PopupChromeApi): 
   root.replaceChildren();
   document.title = TITLE;
 
-  const heading = createTextElement("h1", "popup-title", TITLE);
-  const hostname = createTextElement("p", "popup-hostname", "");
-  hostname.setAttribute("aria-live", "polite");
-  const group = document.createElement("div");
-  group.className = "mode-group";
-  group.setAttribute("role", "group");
-  group.setAttribute("aria-label", GROUP_LABEL);
+  const heading = createTextElement("h1", "popup-title", `${TITLE} on`);
+  const protectionSwitch = createTextElement("button", "popup-switch", "");
+  protectionSwitch.type = "button";
+  protectionSwitch.setAttribute("role", "switch");
+  const blockedSubjects = createTextElement("p", "popup-subjects", "Blocked subjects stay frosted.");
   const error = createTextElement("p", "popup-error", "");
   error.setAttribute("role", "alert");
   error.hidden = true;
-  root.append(heading, hostname, group, error);
+  const settings = createTextElement("button", "popup-settings", "Open Goggles settings");
+  settings.type = "button";
+  settings.addEventListener("click", () => void chromeApi.runtime.openOptionsPage());
+  root.append(heading, protectionSwitch, blockedSubjects, settings, error);
 
   const [activeTab] = await chromeApi.tabs.query({ active: true, currentWindow: true });
   if (typeof activeTab?.id !== "number") {
@@ -85,81 +74,72 @@ export async function mountPopup(root: HTMLElement, chromeApi: PopupChromeApi): 
     return;
   }
 
+  let hostname: string;
   try {
-    hostname.textContent = new URL(initialResponse.origin).hostname;
+    hostname = new URL(initialResponse.origin).hostname;
   } catch {
     error.textContent = START_ERROR;
     error.hidden = false;
     return;
   }
 
-  let confirmedMode = initialResponse.mode;
-  const buttons = new Map<SiteMode, HTMLButtonElement>();
+  let confirmedMode: Exclude<SiteMode, "strict"> =
+    initialResponse.mode === "trusted" ? "trusted" : "protected";
 
-  const selectMode = (selectedMode: SiteMode): void => {
-    for (const [mode, button] of buttons) {
-      button.setAttribute("aria-pressed", String(mode === selectedMode));
-    }
+  const selectMode = (selectedMode: Exclude<SiteMode, "strict">): void => {
+    protectionSwitch.setAttribute("aria-checked", String(selectedMode === "protected"));
+    protectionSwitch.textContent = `Frost ordinary media on ${hostname}`;
   };
 
   const setBusy = (busy: boolean): void => {
-    for (const button of buttons.values()) button.disabled = busy;
+    protectionSwitch.disabled = busy;
   };
 
-  for (const option of MODES) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "mode-button";
-    button.dataset.mode = option.mode;
-    button.setAttribute("aria-pressed", String(option.mode === confirmedMode));
-    button.append(
-      createTextElement("span", "mode-label", option.label),
-      createTextElement("span", "mode-description", option.description),
-    );
-    buttons.set(option.mode, button);
-    group.append(button);
+  selectMode(confirmedMode);
+  protectionSwitch.addEventListener("click", async () => {
+    if (protectionSwitch.disabled) return;
 
-    button.addEventListener("click", async () => {
-      if (button.disabled || option.mode === confirmedMode) return;
+    const priorMode = confirmedMode;
+    const nextMode = confirmedMode === "protected" ? "trusted" : "protected";
+    error.hidden = true;
+    error.textContent = "";
+    selectMode(nextMode);
+    setBusy(true);
 
-      const priorMode = confirmedMode;
-      error.hidden = true;
-      error.textContent = "";
-      selectMode(option.mode);
-      setBusy(true);
-
-      try {
-        const response = await chromeApi.runtime.sendMessage({
-          type: "policy:set-tab",
-          tabId,
-          mode: option.mode,
-          expectedOrigin: initialResponse.origin,
-        });
-        if (
-          !isPolicyContext(response) ||
-          response.mode !== option.mode ||
-          response.origin !== initialResponse.origin
-        ) {
-          throw new TypeError("Invalid policy response");
-        }
-        confirmedMode = response.mode;
-        selectMode(confirmedMode);
-      } catch {
-        selectMode(priorMode);
-        error.textContent = SAVE_ERROR;
-        error.hidden = false;
-      } finally {
-        setBusy(false);
+    try {
+      const response = await chromeApi.runtime.sendMessage({
+        type: "policy:set-tab",
+        tabId,
+        mode: nextMode,
+        expectedOrigin: initialResponse.origin,
+      });
+      if (
+        !isPolicyContext(response) ||
+        response.mode !== nextMode ||
+        response.origin !== initialResponse.origin
+      ) {
+        throw new TypeError("Invalid policy response");
       }
-    });
-  }
+      confirmedMode = nextMode;
+      selectMode(confirmedMode);
+    } catch {
+      selectMode(priorMode);
+      error.textContent = SAVE_ERROR;
+      error.hidden = false;
+    } finally {
+      setBusy(false);
+    }
+  });
 }
 
 const popupRoot = document.querySelector<HTMLElement>("#app");
 if (popupRoot && typeof chrome !== "undefined") {
   void mountPopup(popupRoot, {
     tabs: { query: (queryInfo) => chrome.tabs.query(queryInfo) },
-    runtime: { sendMessage: (message) => chrome.runtime.sendMessage(message) },
+    runtime: {
+      sendMessage: (message) => chrome.runtime.sendMessage(message),
+      openOptionsPage: () => chrome.runtime.openOptionsPage(),
+    },
   }).catch(() => {
     popupRoot.replaceChildren(createTextElement("p", "popup-error", START_ERROR));
   });

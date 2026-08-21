@@ -23,12 +23,12 @@ function createChromeApi(
         { id: 7, url: "https://untrusted-tab-value.example/story" },
       ]),
     },
-    runtime: { sendMessage },
+    runtime: { sendMessage, openOptionsPage: vi.fn().mockResolvedValue(undefined) },
   };
 }
 
-function getModeButtons(root: HTMLElement): HTMLButtonElement[] {
-  return Array.from(root.querySelectorAll<HTMLButtonElement>('button[type="button"]'));
+function getSwitch(root: HTMLElement): HTMLButtonElement {
+  return root.querySelector<HTMLButtonElement>('[role="switch"]')!;
 }
 
 describe("mountPopup", () => {
@@ -39,7 +39,7 @@ describe("mountPopup", () => {
     root = document.querySelector<HTMLElement>("#app")!;
   });
 
-  it("renders the worker-verified hostname and exactly three accessible modes", async () => {
+  it("renders one subject-first switch for the worker-verified hostname", async () => {
     const chromeApi = createChromeApi();
 
     await mountPopup(root, chromeApi);
@@ -53,55 +53,37 @@ describe("mountPopup", () => {
       tabId: 7,
     });
     expect(root.querySelectorAll("h1")).toHaveLength(1);
-    expect(root.querySelector("h1")?.textContent).toBe("Goggles");
+    expect(root.querySelector("h1")?.textContent).toBe("Goggles on");
     expect(root.textContent).toContain("verified.example");
     expect(root.textContent).not.toContain("untrusted-tab-value.example");
 
-    const group = root.querySelector('[role="group"]');
-    expect(group?.getAttribute("aria-label")).toBe("Image protection for this site");
-
-    const buttons = getModeButtons(root);
-    expect(buttons).toHaveLength(3);
-    expect(
-      buttons.map((button) => [
-        button.querySelector(".mode-label")?.textContent,
-        button.querySelector(".mode-description")?.textContent,
-      ]),
-    ).toEqual([
-      ["Trusted", "Show normally"],
-      ["Protected", "Frost individually"],
-      ["Strict", "Always re-protect"],
-    ]);
-    expect(buttons.map((button) => button.getAttribute("aria-pressed"))).toEqual([
-      "false",
-      "true",
-      "false",
-    ]);
+    expect(root.querySelectorAll('[role="switch"]')).toHaveLength(1);
+    expect(root.textContent).toContain("Frost ordinary media on verified.example");
+    expect(root.textContent).toContain("Blocked subjects stay frosted");
+    expect(getSwitch(root).getAttribute("aria-checked")).toBe("true");
   });
 
-  it("sets Strict for the active tab and moves the selected state after success", async () => {
+  it("shows ordinary media for the active tab when the switch is turned off", async () => {
     const chromeApi = createChromeApi(
       vi
         .fn()
         .mockResolvedValueOnce({ origin: "https://verified.example", mode: "protected" })
-        .mockResolvedValueOnce({ origin: "https://verified.example", mode: "strict" }),
+        .mockResolvedValueOnce({ origin: "https://verified.example", mode: "trusted" }),
     );
     await mountPopup(root, chromeApi);
-    const [trusted, protectedButton, strict] = getModeButtons(root);
+    const protectionSwitch = getSwitch(root);
 
-    strict!.click();
+    protectionSwitch.click();
 
     await vi.waitFor(() => {
       expect(chromeApi.runtime.sendMessage).toHaveBeenLastCalledWith({
         type: "policy:set-tab",
         tabId: 7,
-        mode: "strict",
+        mode: "trusted",
         expectedOrigin: "https://verified.example",
       });
-      expect(strict?.getAttribute("aria-pressed")).toBe("true");
+      expect(protectionSwitch.getAttribute("aria-checked")).toBe("false");
     });
-    expect(trusted?.getAttribute("aria-pressed")).toBe("false");
-    expect(protectedButton?.getAttribute("aria-pressed")).toBe("false");
   });
 
   it("rejects a successful-looking response for a different origin", async () => {
@@ -109,16 +91,15 @@ describe("mountPopup", () => {
       vi
         .fn()
         .mockResolvedValueOnce({ origin: "https://verified.example", mode: "protected" })
-        .mockResolvedValueOnce({ origin: "https://redirected.example", mode: "strict" }),
+        .mockResolvedValueOnce({ origin: "https://redirected.example", mode: "trusted" }),
     );
     await mountPopup(root, chromeApi);
-    const [, protectedButton, strict] = getModeButtons(root);
+    const protectionSwitch = getSwitch(root);
 
-    strict!.click();
+    protectionSwitch.click();
 
     await vi.waitFor(() => {
-      expect(protectedButton?.getAttribute("aria-pressed")).toBe("true");
-      expect(strict?.getAttribute("aria-pressed")).toBe("false");
+      expect(protectionSwitch.getAttribute("aria-checked")).toBe("true");
       expect(root.querySelector('[role="alert"]')?.textContent).toBe(
         "Could not update protection. Try again.",
       );
@@ -134,17 +115,15 @@ describe("mountPopup", () => {
         .mockImplementationOnce(() => save.promise),
     );
     await mountPopup(root, chromeApi);
-    const [, protectedButton, strict] = getModeButtons(root);
+    const protectionSwitch = getSwitch(root);
 
-    strict!.click();
-    expect(strict?.getAttribute("aria-pressed")).toBe("true");
-    expect(protectedButton?.getAttribute("aria-pressed")).toBe("false");
+    protectionSwitch.click();
+    expect(protectionSwitch.getAttribute("aria-checked")).toBe("false");
 
     save.reject(new Error("storage unavailable"));
 
     await vi.waitFor(() => {
-      expect(protectedButton?.getAttribute("aria-pressed")).toBe("true");
-      expect(strict?.getAttribute("aria-pressed")).toBe("false");
+      expect(protectionSwitch.getAttribute("aria-checked")).toBe("true");
       expect(root.querySelector('[role="alert"]')?.textContent).toBe(
         "Could not update protection. Try again.",
       );

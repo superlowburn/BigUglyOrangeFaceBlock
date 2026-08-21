@@ -3,17 +3,23 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Goggles</title>
+    <title>Goggles Settings</title>
     <link rel="stylesheet" href="options.css">
   </head>
   <body>
     <main id="app">
       <header class="hero">
-        <div class="brand"><img src="../icons/icon128.png" alt=""><strong>Goggles</strong></div>
+        <div class="brand">
+          <svg class="brand-mark" viewBox="0 0 64 32" aria-hidden="true">
+            <path d="M4 10 11 4h15l3 7v11l-5 6H11l-7-7V10Zm56 0-7-6H38l-3 7v11l5 6h13l7-7V10Z"/>
+            <circle cx="17" cy="16" r="8"/><circle cx="47" cy="16" r="8"/>
+            <path d="M25 13c4-3 10-3 14 0"/>
+          </svg>
+          <span class="brand-copy"><strong>Goggles</strong></span>
+        </div>
         <div class="hero-copy">
-          <p class="eyebrow">NO DISTURBING SURPRISES</p>
-          <h1>See it when you’re ready.</h1>
-          <p>Goggles frosts images and videos so disturbing surprises, jump scares, and attention-grabbing AI media don’t hit you without warning.</p>
+          <h1>Settings</h1>
+          <p>Choose when images and videos stay frosted—and what you always want Goggles to block.</p>
         </div>
         <div id="demo-media" class="demo-media">
           <img src="demo-media.svg" alt="A calm lake beneath wooded hills">
@@ -22,43 +28,23 @@
         </div>
       </header>
 
-      <section aria-labelledby="default-heading">
+      <section id="blocked-subjects" aria-labelledby="blocked-subjects-heading">
         <p class="section-number">01</p>
         <div>
-          <h2 id="default-heading">Choose the starting protection</h2>
-          <p class="section-intro">Existing site choices stay as they are.</p>
-          <div class="mode-choices" role="group" aria-label="Default protection for new sites">
-            <button type="button" data-default-mode="protected" aria-pressed="false">
-              <strong>Personal</strong>
-              <span>Frost new sites. Reveal one item or trust a site whenever you choose.</span>
-            </button>
-            <button type="button" data-default-mode="strict" aria-pressed="false">
-              <strong>A gentler web for kids</strong>
-              <span>Start every new site in Strict mode. Individual reveal still works.</span>
-            </button>
-          </div>
-          <p class="privacy-note">The child-friendly setting adds a pause. It does not monitor browsing or prevent removal of the extension.</p>
-          <p id="save-status" class="save-status" aria-live="polite"></p>
-        </div>
-      </section>
-
-      <section id="blocked-subjects" aria-labelledby="blocked-subjects-heading">
-        <p class="section-number">02</p>
-        <div>
-          <p class="eyebrow">CUSTOM GOGGLES</p>
           <h2 id="blocked-subjects-heading">Blocked subjects</h2>
-          <p class="section-intro">Keep selected subjects frosted—even on sites you always show.</p>
+          <p class="section-intro">Keep likely matches frosted—even on sites where media is normally shown.</p>
           <div class="subject-card">
             <label class="subject-toggle" for="blocked-subjects-enabled">
               <span>
                 <strong>Donald Trump</strong>
-                <small>Best-effort text matching. Images are never uploaded.</small>
+                <small>Frost likely matches</small>
               </span>
               <input id="blocked-subjects-enabled" type="checkbox">
             </label>
+            <p class="subject-explainer">Goggles checks image descriptions, filenames, captions, and nearby titles. It may miss images or frost unrelated ones. Images stay on this device.</p>
             <label class="keyword-editor" for="blocked-subject-keywords">
-              <strong>Words that keep an image frosted</strong>
-              <span>One phrase per line. Goggles checks image descriptions, filenames, captions, and nearby post titles.</span>
+              <strong>Words to look for</strong>
+              <span>One phrase per line.</span>
               <textarea id="blocked-subject-keywords" rows="7" spellcheck="false"></textarea>
             </label>
           </div>
@@ -67,10 +53,10 @@
       </section>
 
       <section aria-labelledby="rules-heading">
-        <p class="section-number">03</p>
+        <p class="section-number">02</p>
         <div>
-          <h2 id="rules-heading">Site rules</h2>
-          <p class="section-intro">Sites you have chosen to always show or always frost.</p>
+          <h2 id="rules-heading">Sites showing ordinary media</h2>
+          <p class="section-intro">These sites show ordinary media. Blocked subjects stay frosted.</p>
           <div id="site-rules" class="site-rules"></div>
         </div>
       </section>
