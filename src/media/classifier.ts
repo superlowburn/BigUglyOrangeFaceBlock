@@ -69,17 +69,18 @@ function hasMeaningfulOverlappingCopy(
   element: HTMLImageElement,
   env: ClassificationEnvironment,
 ): boolean {
-  const source = element.currentSrc || element.src;
   const parent = element.parentElement;
-  if (!source || !parent) return false;
+  if (!parent) return false;
 
   const box = env.box(element);
-  for (const sibling of parent.children) {
+  const container = element.closest(
+    "#shreddit-media-lightbox, dialog, [role=dialog], figure, article",
+  ) ?? parent;
+  for (const sibling of container.querySelectorAll("img[alt]")) {
     if (
       sibling === element ||
       !(sibling instanceof HTMLImageElement) ||
-      !sibling.getAttribute("alt")?.trim() ||
-      (sibling.currentSrc || sibling.src) !== source
+      !sibling.getAttribute("alt")?.trim()
     ) {
       continue;
     }
@@ -113,7 +114,7 @@ function substantiallyOverlaps(first: ClassificationBox, second: ClassificationB
   );
   const smallerArea = Math.min(first.width * first.height, second.width * second.height);
   const largerArea = Math.max(first.width * first.height, second.width * second.height);
-  if (smallerArea <= 0 || smallerArea / largerArea < 0.5) return false;
+  if (smallerArea <= 0 || smallerArea / largerArea < 0.25) return false;
   return (intersectionWidth * intersectionHeight) / smallerArea >= 0.8;
 }
 

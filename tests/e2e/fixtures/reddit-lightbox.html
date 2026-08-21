@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Reddit lightbox fixture</title>
+    <style>
+      html, body, #shreddit-media-lightbox { width: 100%; height: 100%; margin: 0; }
+      #shreddit-media-lightbox { position: relative; overflow: hidden; background: #111; }
+      .backdrop {
+        position: absolute; left: -10%; top: -10%; width: 120%; height: 120%;
+        object-fit: cover; opacity: .3;
+      }
+      zoomable-img { position: absolute; inset: 8%; display: flex; justify-content: center; align-items: center; }
+      .foreground { width: 100%; height: 100%; object-fit: contain; }
+    </style>
+  </head>
+  <body>
+    <div id="shreddit-media-lightbox">
+      <div><img class="backdrop" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='480'%3E%3Crect width='640' height='480' fill='%23566b47'/%3E%3C/svg%3E" alt=""></div>
+      <zoomable-img><img class="foreground" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='600'%3E%3Crect width='800' height='600' fill='%237d9368'/%3E%3C/svg%3E" alt="The full Reddit image"></zoomable-img>
+    </div>
+  </body>
+</html>
