@@ -223,11 +223,12 @@ export class ContentController {
 
       if (!element.isConnected) return;
       if (this.mode === "trusted") {
-        if (isSupportedVideoFrame(element)) void this.providerFrames.trust?.(element);
         const candidate = this.classify(element);
         if (candidate && candidateMatchesBlockedSubject(candidate, this.blockedSubjects)) {
           this.createProtection(candidate);
+          return;
         }
+        if (isSupportedVideoFrame(element)) void this.providerFrames.trust?.(element);
         return;
       }
       const candidate = this.classify(element);

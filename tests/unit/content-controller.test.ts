@@ -251,6 +251,40 @@ describe("ContentController", () => {
     expect(harness.renderer.activeFor(providerFrame)).toHaveLength(1);
   });
 
+  it("matches a dynamic provider frame before trusting can replace its source", () => {
+    const providerFrame = document.createElement("iframe");
+    providerFrame.src = "https://www.youtube.com/embed/trump-campaign";
+    providerFrame.title = "Donald Trump campaign video";
+    const providerFrames = {
+      gate: vi.fn(),
+      release: vi.fn(),
+      regate: vi.fn(),
+      restore: vi.fn(),
+      trust: vi.fn((frame: HTMLIFrameElement) => {
+        frame.src = "about:blank";
+      }),
+      forget: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const classify = vi.fn((element: Element) =>
+      element === providerFrame && providerFrame.src.includes("youtube.com")
+        ? candidate(providerFrame, "video-iframe")
+        : null,
+    );
+    const harness = controllerHarness(new Map(), { classify, providerFrames });
+
+    harness.controller.start({
+      origin: "https://news.example",
+      mode: "trusted",
+      blockedSubjects: { enabled: true, keywords: ["Trump"] },
+    });
+    document.body.append(providerFrame);
+    harness.observer.emit([providerFrame]);
+
+    expect(harness.providerFrames.trust).not.toHaveBeenCalled();
+    expect(harness.renderer.activeFor(providerFrame)).toHaveLength(1);
+  });
+
   it("adds ordinary media when a Trusted site becomes Protected without duplicating subjects", () => {
     const blockedImage = document.createElement("img");
     blockedImage.alt = "Donald Trump at a campaign event";
