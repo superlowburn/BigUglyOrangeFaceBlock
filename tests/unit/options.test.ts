@@ -25,7 +25,7 @@ describe("mountOptions", () => {
     document.body.innerHTML = new DOMParser().parseFromString(source, "text/html").body.innerHTML;
   });
 
-  it("puts blocked subjects first and lists only ordinary-media exceptions", async () => {
+  it("puts blocked subjects first and lists only sites allowed to show images and videos", async () => {
     const api = chromeApi({
       [policyKey("https://example.com")]: "trusted",
       [policyKey("https://frosted.example")]: "protected",
@@ -37,12 +37,12 @@ describe("mountOptions", () => {
 
     expect(root.querySelector('[data-default-mode]')).toBeNull();
     expect(root.querySelector("section h2")?.textContent).toBe("Blocked subjects");
-    expect(root.textContent).toContain("Sites showing ordinary media");
+    expect(root.textContent).toContain("Sites showing images and videos");
     expect(root.textContent).toContain("Blocked subjects stay frosted");
     expect(document.querySelector("#site-rules")?.textContent).toContain("example.com");
     expect(document.querySelector("#site-rules")?.textContent).not.toContain("frosted.example");
     expect(document.querySelector("#site-rules")?.textContent).not.toContain("legacy.example");
-    expect(document.querySelector("[data-remove-policy]")?.textContent).toBe("Frost ordinary media again");
+    expect(document.querySelector("[data-remove-policy]")?.textContent).toBe("Frost images and videos again");
   });
 
   it("removes a trusted-site exception from the settings list", async () => {

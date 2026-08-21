@@ -109,7 +109,7 @@ export async function mountPopup(root: HTMLElement, chromeApi: PopupChromeApi): 
 
   const selectMode = (selectedMode: Exclude<SiteMode, "strict">): void => {
     protectionSwitch.setAttribute("aria-checked", String(selectedMode === "protected"));
-    protectionSwitch.textContent = `Frost ordinary media on ${hostname}`;
+    protectionSwitch.textContent = `Frost images and videos on ${hostname}`;
   };
 
   const setBusy = (busy: boolean): void => {

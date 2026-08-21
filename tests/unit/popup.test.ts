@@ -66,7 +66,7 @@ describe("mountPopup", () => {
     expect(root.textContent).not.toContain("untrusted-tab-value.example");
 
     expect(root.querySelectorAll('[role="switch"]')).toHaveLength(1);
-    expect(root.textContent).toContain("Frost ordinary media on verified.example");
+    expect(root.textContent).toContain("Frost images and videos on verified.example");
     expect(root.textContent).toContain("Blocked subjects — On everywhere");
     expect(root.querySelector(".popup-settings")?.textContent).toBe("Settings");
     expect(getSwitch(root).getAttribute("aria-checked")).toBe("true");

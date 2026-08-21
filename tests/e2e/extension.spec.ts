@@ -317,7 +317,7 @@ test("ships the real icon and first-run settings page", async () => {
     const optionsPage = extension.context.pages().find((page) => page.url().includes("/options/options.html"))!;
     await expect(optionsPage.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
     await expect(optionsPage.getByRole("heading", { name: "Blocked subjects" })).toBeVisible();
-    await expect(optionsPage.getByRole("heading", { name: "Sites showing ordinary media" })).toBeVisible();
+    await expect(optionsPage.getByRole("heading", { name: "Sites showing images and videos" })).toBeVisible();
     const manifest = await extension.worker.evaluate(() => chrome.runtime.getManifest());
     expect(manifest.icons).toEqual({
       "16": "icons/icon16.png",

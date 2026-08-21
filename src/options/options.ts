@@ -49,7 +49,7 @@ export async function mountOptions(
     if (entries.length === 0) {
       const empty = document.createElement("p");
       empty.className = "empty-rules";
-      empty.textContent = "No sites are showing ordinary media. Use the Goggles menu on a page to change this.";
+      empty.textContent = "No sites are showing images and videos. Use the Goggles menu on a page to change this.";
       rules.replaceChildren(empty);
       return;
     }
@@ -66,12 +66,12 @@ export async function mountOptions(
         host.textContent = origin;
       }
       const label = document.createElement("span");
-      label.textContent = "Showing ordinary media";
+      label.textContent = "Showing images and videos";
       copy.append(host, label);
       const remove = document.createElement("button");
       remove.type = "button";
       remove.dataset.removePolicy = key;
-      remove.textContent = "Frost ordinary media again";
+      remove.textContent = "Frost images and videos again";
       remove.addEventListener("click", () => {
         delete values[key];
         renderRules();
