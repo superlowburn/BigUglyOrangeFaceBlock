@@ -589,7 +589,7 @@ describe("ProtectionRenderer", () => {
     expect(layer?.style.getPropertyValue("--eg-control-right")).toBe("519px");
     expect(layer?.style.getPropertyValue("--eg-control-top")).toBe("12px");
     expect(layer?.style.getPropertyValue("--eg-caption-left")).toBe("12px");
-    expect(layer?.style.getPropertyValue("--eg-caption-bottom")).toBe("278px");
+    expect(layer?.style.getPropertyValue("--eg-caption-bottom")).toBe("12px");
 
     handle.reveal();
 

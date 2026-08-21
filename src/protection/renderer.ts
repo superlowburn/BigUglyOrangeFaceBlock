@@ -553,8 +553,8 @@ export class ProtectionRenderer {
     });
     record.layer.style.setProperty("--eg-control-right", `${Math.max(inset, box.right - this.window.innerWidth + inset)}px`);
     record.layer.style.setProperty("--eg-control-top", `${Math.max(inset, inset - box.top)}px`);
-    record.layer.style.setProperty("--eg-caption-left", `${Math.max(inset, inset - box.left)}px`);
-    record.layer.style.setProperty("--eg-caption-bottom", `${Math.max(inset, box.bottom - this.window.innerHeight + inset)}px`);
+    record.layer.style.setProperty("--eg-caption-left", `${inset}px`);
+    record.layer.style.setProperty("--eg-caption-bottom", `${inset}px`);
     record.layer.classList.toggle("eg-compact", compact);
     const menu = record.layer.querySelector<HTMLElement>(".eg-menu:not([hidden])");
     const goggles = record.layer.querySelector<HTMLElement>(".eg-goggles");
