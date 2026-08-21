@@ -8,9 +8,9 @@ const extensionPath = resolve("dist");
 test("gives an overlapping Reddit lightbox stack one visible control set", async () => {
   const context = await chromium.launchPersistentContext("", {
     headless: false,
-    viewport: { width: 711, height: 730 },
+    viewport: { width: 427, height: 240 },
     args: [
-      "--window-size=711,730",
+      "--window-size=427,240",
       "--window-position=-10000,-10000",
       `--disable-extensions-except=${extensionPath}`,
       `--load-extension=${extensionPath}`,
@@ -31,7 +31,8 @@ test("gives an overlapping Reddit lightbox stack one visible control set", async
       "data-eclipse-goggles-protected",
       "image",
     );
-    await expect(page.getByRole("button", { name: "Show description" })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Show description" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Reveal protected media/u })).toHaveCount(1);
     await expect(page.locator("[data-eclipse-goggles-root] .eg-goggles-control")).toHaveCount(0);
     await expect(page.locator("[data-eclipse-goggles-root] .eg-menu")).toHaveCount(0);
 

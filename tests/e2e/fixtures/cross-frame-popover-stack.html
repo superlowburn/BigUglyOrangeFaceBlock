@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Cross-frame popover stack</title>
+    <style>
+      body { margin: 0; min-height: 2200px; }
+      aside { position: absolute; top: 0; right: 20px; width: 132px; }
+      aside img { display: block; width: 132px; height: 74px; margin: 20px 0; }
+      #partial-link {
+        position: fixed;
+        left: 40px;
+        top: 60px;
+        width: 200px;
+        height: 100px;
+      }
+      #partial-target { display: block; width: 100%; height: 100%; }
+      iframe {
+        position: fixed;
+        left: 120px;
+        top: 0;
+        z-index: 1000;
+        width: 287px;
+        height: 240px;
+        border: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <a id="partial-link" href="#unsafe-navigation">
+      <img
+        id="partial-target"
+        alt="Partially covered linked image"
+        src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='200'%3E%3Crect width='600' height='200' fill='%23566b47'/%3E%3C/svg%3E"
+      >
+    </a>
+    <aside id="sidebar"></aside>
+    <iframe title="Floating video" src="cross-frame-video.html"></iframe>
+    <script>
+      const sidebar = document.querySelector("#sidebar");
+      for (let index = 0; index < 20; index += 1) {
+        const image = document.createElement("img");
+        image.alt = `Sidebar thumbnail ${index + 1}`;
+        image.src = "video-placeholder.svg";
+        sidebar.append(image);
+      }
+    </script>
+  </body>
+</html>

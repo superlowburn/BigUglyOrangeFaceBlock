@@ -56,7 +56,7 @@ export async function mountPopup(root: HTMLElement, chromeApi: PopupChromeApi): 
   root.replaceChildren();
   document.title = TITLE;
 
-  const heading = createTextElement("h1", "popup-title", `${TITLE} on`);
+  const heading = createTextElement("h1", "popup-title", TITLE);
   const protectionSwitch = createTextElement("button", "popup-switch", "");
   protectionSwitch.type = "button";
   protectionSwitch.setAttribute("role", "switch");
@@ -64,7 +64,7 @@ export async function mountPopup(root: HTMLElement, chromeApi: PopupChromeApi): 
   const error = createTextElement("p", "popup-error", "");
   error.setAttribute("role", "alert");
   error.hidden = true;
-  const settings = createTextElement("button", "popup-settings", "Open Goggles settings");
+  const settings = createTextElement("button", "popup-settings", "Settings");
   settings.type = "button";
   settings.addEventListener("click", () => void chromeApi.runtime.openOptionsPage());
   root.append(heading, protectionSwitch, blockedSubjects, settings, error);

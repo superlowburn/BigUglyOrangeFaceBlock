@@ -44,6 +44,7 @@ async function launchExtension(
     ...(options.deviceScaleFactor === undefined ? {} : { deviceScaleFactor: options.deviceScaleFactor }),
     args: [
       `--window-size=${acceptanceWindow.width},${acceptanceWindow.height}`,
+      "--window-position=-10000,-10000",
       `--disable-extensions-except=${unpackedPath}`,
       `--load-extension=${unpackedPath}`,
     ],
@@ -147,17 +148,6 @@ function revealThisWithText(scope: Page | Frame, text: string): Locator {
   return layerWithText(scope, text).getByRole("button", { name: /Reveal protected media:/ });
 }
 
-async function revealAllWithText(scope: Page | Frame, text: string): Promise<Locator> {
-  const layer = layerWithText(scope, text);
-  const goggles = layer.getByRole("button", { name: "Goggles reveal options" });
-  await expect(goggles).toBeVisible();
-  await goggles.click({ timeout: 5_000 });
-  await expect(layer.locator(".eg-menu")).toBeVisible();
-  return layer.getByRole("button", {
-    name: "Reveal all protected media on this page",
-  });
-}
-
 async function setMode(worker: Worker, mode: "trusted" | "protected" | "strict"): Promise<void> {
   await worker.evaluate(
     async ({ key, value }) => chrome.storage.local.set({ [key]: value }),
@@ -229,7 +219,7 @@ test("loads the project root as an unpacked extension after building", async () 
   }
 });
 
-test("scales thumbnail controls and keeps small-media descriptions out of the way", async () => {
+test("scales thumbnail frost and keeps small-media descriptions out of the way", async () => {
   const extension = await launchExtension();
   const { page } = extension;
   try {
@@ -243,22 +233,15 @@ test("scales thumbnail controls and keeps small-media descriptions out of the wa
     const info = layer.locator(".eg-info-button");
     await expect(info).toBeHidden();
 
-    await expect.poll(() => layer.evaluate((node) => {
-      const goggles = node.querySelector(".eg-goggles")!;
-      return {
-        blur: getComputedStyle(node).backdropFilter,
-        control: Math.round(goggles.getBoundingClientRect().width),
-      };
-    })).toEqual({ blur: "blur(12px)", control: 30 });
+    await expect.poll(() => layer.evaluate((node) =>
+      getComputedStyle(node).backdropFilter)).toBe("blur(12px)");
 
     await target.evaluate((node) => {
       Object.assign((node as HTMLElement).style, { width: "320px", height: "240px" });
     });
     await expect(layer).not.toHaveClass(/eg-compact/u);
-    await expect.poll(() => layer.evaluate((node) => ({
-      blur: getComputedStyle(node).backdropFilter,
-      control: Math.round(node.querySelector(".eg-goggles")!.getBoundingClientRect().width),
-    }))).toEqual({ blur: "blur(18px)", control: 36 });
+    await expect.poll(() => layer.evaluate((node) =>
+      getComputedStyle(node).backdropFilter)).toBe("blur(18px)");
     await expect(info).toBeHidden();
     await assertAligned(target, layer);
 
@@ -273,8 +256,8 @@ test("scales thumbnail controls and keeps small-media descriptions out of the wa
     await info.click();
     await expect(layer.locator(".eg-info-panel")).toBeVisible();
     await expect(layer.locator(".eg-info-description")).toHaveText(/for expansion$/u);
-    await layer.getByRole("button", { name: "Always show descriptions on this site" }).click();
-    await expect(layer.getByRole("button", { name: "Stop always showing descriptions" })).toBeVisible();
+    await layer.getByRole("button", { name: "Show descriptions by default on this site" }).click();
+    await expect(layer.getByRole("button", { name: "Stop showing descriptions by default" })).toBeVisible();
 
     await page.reload();
     await expect(target).toHaveAttribute("data-eclipse-goggles-protected", "image");
@@ -289,7 +272,7 @@ test("scales thumbnail controls and keeps small-media descriptions out of the wa
   }
 });
 
-test("keeps the goggles menu readable at the viewport edge", async () => {
+test("keeps the description control readable at the viewport edge", async () => {
   const extension = await launchExtension();
   const { page } = extension;
   try {
@@ -300,22 +283,27 @@ test("keeps the goggles menu readable at the viewport edge", async () => {
       Object.assign((node as HTMLElement).style, {
         position: "fixed",
         left: "-185px",
-        top: "20px",
+        top: "-140px",
+        width: "640px",
+        height: "360px",
       });
     });
     await assertAligned(target, layer);
-    await layer.getByRole("button", { name: "Goggles reveal options" }).click();
-    const menu = layer.locator(".eg-menu");
-    await expect(menu).toBeVisible();
+    const info = layer.getByRole("button", { name: "Show description" });
+    await expect(info).toBeVisible();
+    await expect.poll(async () => (await info.boundingBox())?.x).toBeGreaterThanOrEqual(8);
+    await info.click({ timeout: 5_000 });
+    const panel = layer.locator(".eg-info-panel");
+    await expect(panel).toBeVisible();
 
-    const menuBox = await menu.boundingBox();
+    const panelBox = await panel.boundingBox();
     const viewport = page.viewportSize();
-    expect(menuBox).not.toBeNull();
+    expect(panelBox).not.toBeNull();
     expect(viewport).not.toBeNull();
-    expect(menuBox!.x).toBeGreaterThanOrEqual(8);
-    expect(menuBox!.y).toBeGreaterThanOrEqual(8);
-    expect(menuBox!.x + menuBox!.width).toBeLessThanOrEqual(viewport!.width - 8);
-    expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(viewport!.height - 8);
+    expect(panelBox!.x).toBeGreaterThanOrEqual(8);
+    expect(panelBox!.y).toBeGreaterThanOrEqual(8);
+    expect(panelBox!.x + panelBox!.width).toBeLessThanOrEqual(viewport!.width - 8);
+    expect(panelBox!.y + panelBox!.height).toBeLessThanOrEqual(viewport!.height - 8);
   } finally {
     await closeExtension(extension);
   }
@@ -327,8 +315,9 @@ test("ships the real icon and first-run settings page", async () => {
     await expect.poll(() => extension.context.pages().map((page) => page.url()))
       .toContainEqual(expect.stringContaining("/options/options.html"));
     const optionsPage = extension.context.pages().find((page) => page.url().includes("/options/options.html"))!;
-    await expect(optionsPage.getByRole("heading", { name: "See it when you’re ready." })).toBeVisible();
-    await expect(optionsPage.getByRole("button", { name: "Click to reveal" })).toBeVisible();
+    await expect(optionsPage.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
+    await expect(optionsPage.getByRole("heading", { name: "Blocked subjects" })).toBeVisible();
+    await expect(optionsPage.getByRole("heading", { name: "Sites showing ordinary media" })).toBeVisible();
     const manifest = await extension.worker.evaluate(() => chrome.runtime.getManifest());
     expect(manifest.icons).toEqual({
       "16": "icons/icon16.png",
@@ -336,10 +325,8 @@ test("ships the real icon and first-run settings page", async () => {
       "48": "icons/icon48.png",
       "128": "icons/icon128.png",
     });
-    await optionsPage.getByRole("button", { name: /A gentler web for kids/u }).click();
-    await expect.poll(() => extension.worker.evaluate(async () =>
-      (await chrome.storage.local.get("default-site-mode"))["default-site-mode"],
-    )).toBe("strict");
+    await expect(optionsPage.locator("#blocked-subjects-enabled")).not.toBeChecked();
+    await expect(optionsPage.getByText("Default for new sites")).toHaveCount(0);
   } finally {
     await closeExtension(extension);
   }
@@ -378,10 +365,10 @@ test("protects article images", async () => {
 
     await page.locator("#second").evaluate((node) => node.scrollIntoView({ block: "start" }));
     await assertAligned(page.locator("#second"), layerWithText(page, "A red kite"));
-    await (await revealAllWithText(page, "A red kite")).focus();
+    await revealThisWithText(page, "A red kite").focus();
     await page.keyboard.press("Enter");
     await expect(page.locator("#second")).not.toHaveAttribute("data-eclipse-goggles-protected", "image");
-    await expect(page.locator(protectedSelector)).toHaveCount(0);
+    await expect(page.locator(protectedSelector)).toHaveCount(1);
   } finally {
     await closeExtension(extension);
   }
@@ -524,7 +511,7 @@ test("protects media in existing and dynamically inserted open shadow roots", as
   }
 });
 
-test("protects dynamic media and keeps a site control available in Trusted mode", async () => {
+test("protects dynamic media across live site policy changes", async () => {
   const extension = await launchExtension();
   const { page, worker } = extension;
   try {
@@ -536,10 +523,9 @@ test("protects dynamic media and keeps a site control available in Trusted mode"
 
     await setMode(worker, "trusted");
     await expect(page.locator(protectedSelector)).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Goggles site options" })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Goggles site options" })).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Goggles site options" }).click();
-    await page.getByRole("button", { name: "Frost images on this site again" }).click();
+    await setMode(worker, "protected");
     await expect(page.locator("#route-image")).toHaveAttribute(
       "data-eclipse-goggles-protected",
       "image",
@@ -568,7 +554,7 @@ test("protects media inserted by back-forward SPA navigation", async () => {
   }
 });
 
-test("Strict mode re-protects a revealed image after two seconds fully away", async () => {
+test("converts a legacy Strict setting and leaves revealed media visible", async () => {
   const extension = await launchExtension();
   const { page, worker } = extension;
   try {
@@ -579,19 +565,12 @@ test("Strict mode re-protects a revealed image after two seconds fully away", as
     await revealThisWithText(page, "A lighthouse").click();
     await expect(page.locator("#strict-image")).not.toHaveAttribute("data-eclipse-goggles-protected", "image");
 
-    const scrolledAt = Date.now();
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-    await page.waitForTimeout(1_250);
+    await page.waitForTimeout(2_250);
     await expect(page.locator("#strict-image")).not.toHaveAttribute(
       "data-eclipse-goggles-protected",
       "image",
     );
-    await expect(page.locator("#strict-image")).toHaveAttribute(
-      "data-eclipse-goggles-protected",
-      "image",
-      { timeout: 2_000 },
-    );
-    expect(Date.now() - scrolledAt).toBeGreaterThanOrEqual(2_000);
   } finally {
     await closeExtension(extension);
   }
@@ -677,7 +656,7 @@ test("withholds provider requests until one exact trusted reveal and re-protecti
     await expect(page.locator("#youtube-twin")).toHaveAttribute("src", "about:blank");
     await expect(vimeo).toHaveAttribute("src", "about:blank");
 
-    const reprotect = page.getByRole("button", { name: "Protect again", exact: true });
+    const reprotect = page.getByRole("button", { name: "Frost again", exact: true });
     await reprotect.focus();
     await reprotect.press("Enter");
     await expect(youtube).toHaveAttribute("src", "about:blank");
@@ -758,9 +737,18 @@ test("keeps overlays aligned after resize and 125 percent page scale", async () 
     await expect(target).toHaveAttribute("data-eclipse-goggles-protected", "image");
     await assertAligned(target, layer);
 
-    await page.setViewportSize({ width: 900, height: 650 });
-    await assertAligned(target, layer);
     const cdp = await context.newCDPSession(page);
+    const { windowId } = await cdp.send("Browser.getWindowForTarget");
+    const { bounds: launchBounds } = await cdp.send("Browser.getWindowBounds", { windowId });
+    await cdp.send("Emulation.setDeviceMetricsOverride", {
+      width: 900,
+      height: 650,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+    const { bounds } = await cdp.send("Browser.getWindowBounds", { windowId });
+    expect(bounds).toEqual(launchBounds);
+    await assertAligned(target, layer);
     await cdp.send("Emulation.setPageScaleFactor", { pageScaleFactor: 1.25 });
     await assertAligned(target, layer);
   } finally {
@@ -790,65 +778,42 @@ test("has accessible goggles navigation, specified caption contrast, and only ap
       name: "Reveal protected media: A moonlit lake beside dark hills",
       exact: true,
     })).toHaveCount(1);
-    await expect(layer.locator("button")).toHaveCount(8);
+    await expect(layer.locator("button")).toHaveCount(3);
     const revealThis = layer.getByRole("button", {
       name: "Reveal protected media: A moonlit lake beside dark hills",
       exact: true,
     });
-    const goggles = layer.getByRole("button", { name: "Goggles reveal options" });
     const info = layer.locator(".eg-info-button");
-    const always = layer.getByRole("button", { name: "Always show descriptions on this site" });
-    const revealMenuItem = layer.locator(".eg-menu-reveal");
-    const revealAll = layer.getByRole("button", {
-      name: "Reveal all protected media on this page",
-      exact: true,
-    });
-    const allowSite = layer.getByRole("button", {
-      name: "Always show visual media on this site",
-      exact: true,
-    });
-    const settings = layer.getByRole("button", { name: "Open Custom Goggles settings" });
+    const always = layer.getByRole("button", { name: "Show descriptions by default on this site" });
     await page.locator("#before-media").focus();
     await page.keyboard.press("Tab");
     expect(await revealThis.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
     await page.keyboard.press("Tab");
     expect(await info.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
     await page.keyboard.press("Enter");
-    await expect(info).toHaveAttribute("aria-label", "Hide image description");
+    await expect(info).toHaveAttribute("aria-label", "Hide description");
     await expect(layer.locator(".eg-info-panel")).toBeVisible();
     await page.keyboard.press("Tab");
     expect(await always.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
     await page.keyboard.press("Tab");
-    expect(await goggles.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
-    await page.keyboard.press("Enter");
-    await expect(layer.locator(".eg-menu")).toBeVisible();
-    await page.keyboard.press("Tab");
-    expect(await revealMenuItem.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
-    await page.keyboard.press("Tab");
-    expect(await revealAll.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
-    await page.keyboard.press("Tab");
-    expect(await allowSite.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
-    await page.keyboard.press("Tab");
-    expect(await settings.evaluate((node) => (node.getRootNode() as ShadowRoot).activeElement === node)).toBe(true);
-    await page.keyboard.press("Tab");
     await expect(page.locator("#after-first-media")).toBeFocused();
     await page.keyboard.press("Shift+Tab");
-    expect(await settings.evaluate((node) => {
+    expect(await always.evaluate((node) => {
       const root = node.getRootNode();
       return root instanceof ShadowRoot &&
         root.activeElement === node &&
         document.activeElement === root.host;
-    }), "Tab navigation did not return to Goggles settings").toBe(true);
+    }), "Tab navigation did not return to description settings").toBe(true);
     const presentation = await layer.evaluate((node) => {
-      const focusedStyle = getComputedStyle(node.querySelector(".eg-menu-brand")!);
+      const focusedStyle = getComputedStyle(node.querySelector(".eg-info-always")!);
       const panelStyle = getComputedStyle(node.querySelector(".eg-info-panel")!);
       return {
         outlineColor: focusedStyle.outlineColor,
         outlineWidth: focusedStyle.outlineWidth,
         color: panelStyle.color,
         background: panelStyle.backgroundColor,
-        gogglesWidth: Math.round(node.querySelector(".eg-goggles")!.getBoundingClientRect().width),
-        gogglesHeight: Math.round(node.querySelector(".eg-goggles")!.getBoundingClientRect().height),
+        infoWidth: Math.round(node.querySelector(".eg-info-button")!.getBoundingClientRect().width),
+        infoHeight: Math.round(node.querySelector(".eg-info-button")!.getBoundingClientRect().height),
       };
     });
     expect(presentation).toEqual({
@@ -856,8 +821,8 @@ test("has accessible goggles navigation, specified caption contrast, and only ap
       outlineWidth: "2px",
       color: "rgb(255, 255, 255)",
       background: "rgba(31, 33, 35, 0.94)",
-      gogglesWidth: 44,
-      gogglesHeight: 44,
+      infoWidth: 28,
+      infoHeight: 28,
     });
 
     const publicAttributes = await page.locator("*").evaluateAll((elements) =>

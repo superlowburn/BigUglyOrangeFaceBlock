@@ -351,9 +351,18 @@ export class ProtectionRenderer {
     });
     record.layer.style.setProperty("--eg-control-right", `${Math.max(inset, box.right - this.window.innerWidth + inset)}px`);
     record.layer.style.setProperty("--eg-control-top", `${Math.max(inset, inset - box.top)}px`);
-    record.layer.style.setProperty("--eg-caption-left", `${inset}px`);
+    record.layer.style.setProperty("--eg-caption-left", `${Math.max(inset, inset - box.left)}px`);
     record.layer.style.setProperty("--eg-caption-bottom", `${inset}px`);
     record.layer.classList.toggle("eg-compact", compact);
+    const coveredByIframe = isCoveredByIframe(
+      this.document,
+      record.candidate.element,
+      record.layer,
+      box,
+      this.window,
+    );
+    record.layer.style.pointerEvents = coveredByIframe ? "none" : "";
+    record.layer.style.visibility = coveredByIframe ? "hidden" : "";
   }
 
   private scheduleRecordUpdate(record: ProtectionRecord): void {
@@ -456,4 +465,35 @@ function showInTopLayer(host: HTMLElement): void {
   } catch {
     host.removeAttribute("popover");
   }
+}
+
+function isCoveredByIframe(
+  document: Document,
+  target: HTMLElement,
+  layer: HTMLElement,
+  box: DOMRect,
+  window: Window,
+): boolean {
+  if (typeof document.elementFromPoint !== "function") return false;
+  const visibleLeft = Math.max(0, box.left);
+  const visibleRight = Math.min(window.innerWidth, box.right);
+  const visibleTop = Math.max(0, box.top);
+  const visibleBottom = Math.min(window.innerHeight, box.bottom);
+  if (visibleLeft >= visibleRight || visibleTop >= visibleBottom) return false;
+
+  const priorPointerEvents = layer.style.pointerEvents;
+  layer.style.pointerEvents = "none";
+  const underlying = document.elementFromPoint(
+    (visibleLeft + visibleRight) / 2,
+    (visibleTop + visibleBottom) / 2,
+  );
+  layer.style.pointerEvents = priorPointerEvents;
+  if (underlying === target || underlying?.tagName !== "IFRAME") return false;
+  const iframeBox = underlying.getBoundingClientRect();
+  return (
+    iframeBox.left <= visibleLeft &&
+    iframeBox.right >= visibleRight &&
+    iframeBox.top <= visibleTop &&
+    iframeBox.bottom >= visibleBottom
+  );
 }

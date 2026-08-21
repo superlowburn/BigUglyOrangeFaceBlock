@@ -7,9 +7,10 @@ const extensionPath = resolve("dist");
 test("keeps the info button at the image's true bottom-left corner", async () => {
   const context = await chromium.launchPersistentContext("", {
     headless: false,
-    viewport: { width: 711, height: 730 },
+    viewport: { width: 427, height: 240 },
     args: [
-      "--window-size=711,730",
+      "--window-size=427,240",
+      "--window-position=-10000,-10000",
       `--disable-extensions-except=${extensionPath}`,
       `--load-extension=${extensionPath}`,
     ],
@@ -20,7 +21,7 @@ test("keeps the info button at the image's true bottom-left corner", async () =>
     const page = context.pages()[0] ?? await context.newPage();
     await page.goto("http://127.0.0.1:4173/tall-image.html");
     const image = page.locator("img");
-    const info = page.getByRole("button", { name: "Show image description" });
+    const info = page.getByRole("button", { name: "Show description" });
     await expect(info).toHaveCount(1);
 
     const initialInfoBox = await info.boundingBox();
