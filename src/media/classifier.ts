@@ -73,24 +73,29 @@ function hasMeaningfulOverlappingCopy(
   if (!parent) return false;
 
   const box = env.box(element);
-  const container = element.closest(
-    "#shreddit-media-lightbox, dialog, [role=dialog], figure, article",
-  ) ?? parent;
+  const redditLightbox = element.closest("#shreddit-media-lightbox");
+  const container = redditLightbox ?? parent;
+  const source = element.currentSrc || element.src;
   for (const sibling of container.querySelectorAll("img[alt]")) {
     if (
       sibling === element ||
       !(sibling instanceof HTMLImageElement) ||
-      !sibling.getAttribute("alt")?.trim()
+      !sibling.getAttribute("alt")?.trim() ||
+      (!redditLightbox && (sibling.currentSrc || sibling.src) !== source)
     ) {
       continue;
     }
 
-    if (substantiallyOverlaps(box, env.box(sibling))) return true;
+    if (substantiallyOverlaps(box, env.box(sibling), redditLightbox ? 0.25 : 0.5)) return true;
   }
   return false;
 }
 
-function substantiallyOverlaps(first: ClassificationBox, second: ClassificationBox): boolean {
+function substantiallyOverlaps(
+  first: ClassificationBox,
+  second: ClassificationBox,
+  minimumSizeRatio: number,
+): boolean {
   if (
     first.left === undefined ||
     first.top === undefined ||
@@ -114,7 +119,7 @@ function substantiallyOverlaps(first: ClassificationBox, second: ClassificationB
   );
   const smallerArea = Math.min(first.width * first.height, second.width * second.height);
   const largerArea = Math.max(first.width * first.height, second.width * second.height);
-  if (smallerArea <= 0 || smallerArea / largerArea < 0.25) return false;
+  if (smallerArea <= 0 || smallerArea / largerArea < minimumSizeRatio) return false;
   return (intersectionWidth * intersectionHeight) / smallerArea >= 0.8;
 }
 
