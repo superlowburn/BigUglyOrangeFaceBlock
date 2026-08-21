@@ -13,19 +13,12 @@ export interface ProtectionHandle {
 
 export interface ProtectionOptions {
   description: string;
+  blockedSubject?: boolean;
   mode: SiteMode;
   onReveal: () => void;
-  onRevealAll: () => void;
-  onAllowSite: () => void;
-  onOpenSettings: () => void;
   onToggleDescriptions: () => void;
   descriptionsVisible: boolean;
   onReprotect: () => void;
-}
-
-export interface SiteAllowedControlOptions {
-  onProtectSite: () => void;
-  onOpenSettings?: () => void;
 }
 
 export interface RendererEnvironment {
@@ -40,12 +33,10 @@ export interface RendererEnvironment {
 interface ProtectionRecord {
   candidate: MediaCandidate;
   description: string;
+  blockedSubject: boolean;
   host: HTMLElement;
   layer: HTMLDivElement;
   onReveal: () => void;
-  onRevealAll: () => void;
-  onAllowSite: () => void;
-  onOpenSettings: () => void;
   onToggleDescriptions: () => void;
   onReprotect: () => void;
   descriptionVisible: boolean;
@@ -57,13 +48,6 @@ interface ProtectionRecord {
   handle: ProtectionHandle;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
-}
-
-interface SiteControlRecord {
-  host: HTMLElement;
-  layer: HTMLDivElement;
-  goggles: HTMLButtonElement;
-  menu: HTMLElement;
 }
 
 export function isTrustedActivation(event: Event): boolean {
@@ -84,15 +68,8 @@ export class ProtectionRenderer {
   private readonly createStrictGuard: () => Pick<StrictRevealGuard, "watch">;
   private readonly records = new Map<HTMLElement, ProtectionRecord>();
   private readonly dirtyRecords = new Set<ProtectionRecord>();
-  private siteControl: SiteControlRecord | null = null;
   private frame: number | null = null;
   private listening = false;
-
-  private closeMenusForPointer = (event: PointerEvent): void => {
-    const insideGoggles = event.composedPath().some((node) =>
-      node instanceof Element && node.classList.contains("eg-goggles-control"));
-    if (!insideGoggles) this.closeAllMenus();
-  };
 
   constructor(environment: RendererEnvironment = {}) {
     this.document = environment.document ?? document;
@@ -125,12 +102,10 @@ export class ProtectionRenderer {
     record = {
       candidate,
       description: options.description,
+      blockedSubject: options.blockedSubject ?? false,
       host,
       layer,
       onReveal: options.onReveal,
-      onRevealAll: options.onRevealAll,
-      onAllowSite: options.onAllowSite,
-      onOpenSettings: options.onOpenSettings,
       onToggleDescriptions: options.onToggleDescriptions,
       onReprotect: options.onReprotect,
       descriptionVisible: options.descriptionsVisible,
@@ -158,70 +133,6 @@ export class ProtectionRenderer {
 
   debugLayerFor(element: HTMLElement): HTMLDivElement | null {
     return this.records.get(element)?.layer ?? null;
-  }
-
-  debugSiteLayer(): HTMLDivElement | null {
-    return this.siteControl?.layer ?? null;
-  }
-
-  showSiteAllowedControl(options: SiteAllowedControlOptions): void {
-    if (this.siteControl) return;
-
-    const { host, shadow } = this.createIsolatedHost();
-    const layer = this.document.createElement("div");
-    layer.className = "eg-layer eg-site-layer";
-    const gogglesControl = this.document.createElement("div");
-    gogglesControl.className = "eg-goggles-control";
-    const goggles = this.createIconButton("eg-goggles", "Goggles site options", "goggles");
-    goggles.setAttribute("aria-expanded", "false");
-    goggles.setAttribute("aria-controls", "eg-site-menu");
-    const menu = this.document.createElement("div");
-    menu.id = "eg-site-menu";
-    menu.className = "eg-menu";
-    menu.hidden = true;
-    const protectSite = this.createButton(
-      "Frost this site again",
-      "eg-site-protect",
-      "Frost images on this site again",
-    );
-    protectSite.addEventListener("click", (event) => {
-      if (!this.trustedActivation(event)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      options.onProtectSite();
-    });
-    menu.append(protectSite, this.createMenuBrand(options.onOpenSettings ?? (() => undefined)));
-    gogglesControl.append(goggles, menu);
-    layer.append(gogglesControl);
-    shadow.append(layer);
-    this.document.documentElement.append(host);
-    showInTopLayer(host);
-
-    this.siteControl = { host, layer, goggles, menu };
-    goggles.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const open = menu.hidden === true;
-      this.closeAllMenus();
-      menu.hidden = !open;
-      goggles.setAttribute("aria-expanded", String(open));
-      layer.classList.toggle("eg-menu-open", open);
-      if (open) this.placeMenu(layer, goggles, menu);
-    });
-    gogglesControl.addEventListener("mouseleave", () => this.closeSiteMenu());
-    layer.addEventListener("keydown", (event) => {
-      if (event.key !== "Escape" || menu.hidden) return;
-      this.closeSiteMenu();
-      goggles.focus();
-    });
-    this.startListening();
-  }
-
-  hideSiteAllowedControl(): void {
-    if (!this.siteControl) return;
-    this.siteControl.host.remove();
-    this.siteControl = null;
-    this.stopListeningIfIdle();
   }
 
   private createRoot(target: HTMLElement): { host: HTMLElement; shadow: ShadowRoot } {
@@ -252,12 +163,11 @@ export class ProtectionRenderer {
     return { host, shadow };
   }
 
-  private activate(record: ProtectionRecord, event: Event, action: "reveal" | "reveal-all" | "reprotect"): boolean {
+  private activate(record: ProtectionRecord, event: Event, action: "reveal" | "reprotect"): boolean {
     if (!this.trustedActivation(event) || record.removed) return false;
     event.preventDefault();
     event.stopPropagation();
     if (action === "reprotect") record.handle.reprotect();
-    else if (action === "reveal-all") record.onRevealAll();
     else record.handle.reveal();
     return true;
   }
@@ -266,7 +176,7 @@ export class ProtectionRenderer {
     if (record.removed || record.revealed) return;
     record.revealed = true;
     record.layer.className = "eg-layer eg-revealed";
-    const reprotect = this.createIconButton("eg-reprotect", "Protect again", "undo");
+    const reprotect = this.createIconButton("eg-reprotect", "Frost again", "undo");
     reprotect.addEventListener("click", (event) => this.activate(record, event, "reprotect"));
     record.layer.replaceChildren(reprotect);
     record.candidate.element.removeAttribute("data-eclipse-goggles-protected");
@@ -301,7 +211,7 @@ export class ProtectionRenderer {
     const revealSurface = this.createButton(
       "",
       "eg-reveal-surface",
-      `Reveal protected media: ${description}`,
+      `${optionsLabel(record)}: ${description}`,
     );
     revealSurface.addEventListener("click", (event) => {
       this.activate(record, event, "reveal");
@@ -311,7 +221,7 @@ export class ProtectionRenderer {
     const infoControl = this.document.createElement("div");
     infoControl.className = "eg-info-control";
     infoControl.hidden = !presentation.showInfo;
-    const info = this.createButton("i", "eg-info-button", "Show image description");
+    const info = this.createButton("i", "eg-info-button", "Show description");
     info.setAttribute("aria-expanded", "false");
     info.setAttribute("aria-controls", "eg-info-panel");
     const characters = Array.from(description);
@@ -326,9 +236,9 @@ export class ProtectionRenderer {
     fullCopy.className = "eg-info-description";
     fullCopy.textContent = description;
     const always = this.createButton(
-      "Always show descriptions on this site",
+      "Show descriptions by default on this site",
       "eg-info-always",
-      "Always show descriptions on this site",
+      "Show descriptions by default on this site",
     );
     info.addEventListener("click", (event) => {
       event.preventDefault();
@@ -353,59 +263,6 @@ export class ProtectionRenderer {
     infoControl.append(info, previewCopy, panel);
     children.push(infoControl);
 
-    const gogglesControl = this.document.createElement("div");
-    gogglesControl.className = "eg-goggles-control";
-    const goggles = this.createIconButton("eg-goggles", "Goggles reveal options", "goggles");
-    goggles.setAttribute("aria-expanded", "false");
-    goggles.setAttribute("aria-controls", "eg-reveal-menu");
-    const menu = this.document.createElement("div");
-    menu.id = "eg-reveal-menu";
-    menu.className = "eg-menu";
-    menu.hidden = true;
-    const reveal = this.createButton(
-      "Reveal image",
-      "eg-menu-reveal",
-      `Reveal protected media: ${description}`,
-    );
-    const revealAll = this.createButton(
-      "Reveal all on page",
-      "eg-reveal-all",
-      "Reveal all protected media on this page",
-    );
-    const allowSite = this.createButton(
-      "Always show on this site",
-      "eg-allow-site",
-      "Always show visual media on this site",
-    );
-    reveal.addEventListener("click", (event) => this.activate(record, event, "reveal"));
-    revealAll.addEventListener("click", (event) => this.activate(record, event, "reveal-all"));
-    allowSite.addEventListener("click", (event) => {
-      if (!this.trustedActivation(event) || record.removed) return;
-      event.preventDefault();
-      event.stopPropagation();
-      record.onAllowSite();
-    });
-    menu.append(reveal, revealAll);
-    if (record.mode !== "trusted") menu.append(allowSite);
-    menu.append(this.createMenuBrand(record.onOpenSettings));
-    gogglesControl.append(goggles, menu);
-    goggles.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const open = menu.hidden === true;
-      this.closeAllMenus();
-      menu.hidden = !open;
-      goggles.setAttribute("aria-expanded", String(open));
-      layer.classList.toggle("eg-menu-open", open);
-      if (open) this.placeMenu(layer, goggles, menu);
-    });
-    gogglesControl.addEventListener("mouseleave", () => this.closeMenu(record));
-    layer.addEventListener("keydown", (event) => {
-      if (event.key !== "Escape" || menu.hidden) return;
-      this.closeMenu(record);
-      goggles.focus();
-    });
-    children.push(gogglesControl);
     layer.replaceChildren(...children);
     this.updateDescriptionState(record);
   }
@@ -423,76 +280,15 @@ export class ProtectionRenderer {
   private createIconButton(
     className: string,
     label: string,
-    icon: "goggles" | "undo",
+    icon: "undo",
   ): HTMLButtonElement {
     const button = this.createButton("", className, label);
     const svg = this.document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("viewBox", icon === "goggles" ? "0 0 28 20" : "0 0 24 24");
+    svg.setAttribute("viewBox", "0 0 24 24");
     svg.setAttribute("aria-hidden", "true");
-    svg.innerHTML = icon === "goggles"
-      ? '<path d="M2 6 5 2h7l1.5 4v8L11 18H5l-3-4V6Zm24 0-3-4h-7l-1.5 4v8l2.5 4h6l3-4V6Z"/><circle cx="8" cy="10" r="4"/><circle cx="20" cy="10" r="4"/><path d="M12 8.5c1.3-1 2.7-1 4 0M2 8 .5 7m25.5 1 1.5-1"/>'
-      : '<path d="M7 7H3V3M3.5 7A8 8 0 1 1 5 16"/>';
+    svg.innerHTML = '<path d="M7 7H3V3M3.5 7A8 8 0 1 1 5 16"/>';
     button.append(svg);
     return button;
-  }
-
-  private closeMenu(record: ProtectionRecord): void {
-    const menu = record.layer.querySelector<HTMLElement>(".eg-menu");
-    const goggles = record.layer.querySelector<HTMLElement>(".eg-goggles");
-    if (menu) menu.hidden = true;
-    goggles?.setAttribute("aria-expanded", "false");
-    record.layer.classList.remove("eg-menu-open");
-  }
-
-  private placeMenu(layer: HTMLElement, trigger: HTMLElement, menu: HTMLElement): void {
-    const margin = 8;
-    const layerBox = layer.getBoundingClientRect();
-    const containingBox = menu.parentElement?.getBoundingClientRect() ?? layerBox;
-    const triggerBox = trigger.getBoundingClientRect();
-    const menuBox = menu.getBoundingClientRect();
-    const menuWidth = menuBox.width || 204;
-    const menuHeight = menuBox.height;
-    const maxLeft = Math.max(margin, this.window.innerWidth - menuWidth - margin);
-    const viewportLeft = Math.min(maxLeft, Math.max(margin, triggerBox.right - menuWidth));
-    const maxTop = Math.max(margin, this.window.innerHeight - menuHeight - margin);
-    const preferredTop = triggerBox.bottom + menuHeight <= this.window.innerHeight - margin
-      ? triggerBox.bottom
-      : triggerBox.top - menuHeight;
-    const viewportTop = Math.min(maxTop, Math.max(margin, preferredTop));
-    Object.assign(menu.style, {
-      left: `${viewportLeft - containingBox.left}px`,
-      top: `${viewportTop - containingBox.top}px`,
-      right: "auto",
-    });
-  }
-
-  private closeSiteMenu(): void {
-    if (!this.siteControl) return;
-    this.siteControl.menu.hidden = true;
-    this.siteControl.goggles.setAttribute("aria-expanded", "false");
-    this.siteControl.layer.classList.remove("eg-menu-open");
-  }
-
-  private closeAllMenus(): void {
-    for (const record of this.records.values()) this.closeMenu(record);
-    this.closeSiteMenu();
-  }
-
-  private createMenuBrand(onOpenSettings: () => void): HTMLButtonElement {
-    const brand = this.createButton("", "eg-menu-brand", "Open Custom Goggles settings");
-    brand.className = "eg-menu-brand";
-    const name = this.document.createElement("strong");
-    name.textContent = "Custom Goggles";
-    const tagline = this.document.createElement("span");
-    tagline.textContent = "Blocked subjects and site rules";
-    brand.append(name, tagline);
-    brand.addEventListener("click", (event) => {
-      if (!this.trustedActivation(event)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      onOpenSettings();
-    });
-    return brand;
   }
 
   private updateDescriptionState(record: ProtectionRecord): void {
@@ -501,11 +297,11 @@ export class ProtectionRenderer {
     const always = record.layer.querySelector<HTMLButtonElement>(".eg-info-always");
     control?.classList.toggle("eg-info-pinned", record.descriptionVisible);
     info?.setAttribute("aria-expanded", String(record.descriptionVisible));
-    info?.setAttribute("aria-label", record.descriptionVisible ? "Hide image description" : "Show image description");
+    info?.setAttribute("aria-label", record.descriptionVisible ? "Hide description" : "Show description");
     if (always) {
       always.textContent = record.pageDescriptionsVisible
-        ? "Stop always showing descriptions"
-        : "Always show descriptions on this site";
+        ? "Stop showing descriptions by default"
+        : "Show descriptions by default on this site";
       always.setAttribute("aria-label", always.textContent);
     }
   }
@@ -524,6 +320,10 @@ export class ProtectionRenderer {
   private updateRecord(record: ProtectionRecord, currentBox?: DOMRect): void {
     if (record.removed) return;
     const box = currentBox ?? record.candidate.element.getBoundingClientRect();
+    record.layer.style.visibility = isVisualKind(record.candidate.kind) &&
+      isSubstantiallyCoveredByIframe(this.document, record.candidate.element, box)
+      ? "hidden"
+      : "";
     const presentation = presentationFor(box);
     const { compact, controlSize, inset, blur, showInfo } = presentation;
     record.layer.style.setProperty("--eg-control-size", `${controlSize}px`);
@@ -558,9 +358,6 @@ export class ProtectionRenderer {
     record.layer.style.setProperty("--eg-caption-left", `${inset}px`);
     record.layer.style.setProperty("--eg-caption-bottom", `${inset}px`);
     record.layer.classList.toggle("eg-compact", compact);
-    const menu = record.layer.querySelector<HTMLElement>(".eg-menu:not([hidden])");
-    const goggles = record.layer.querySelector<HTMLElement>(".eg-goggles");
-    if (menu && goggles) this.placeMenu(record.layer, goggles, menu);
   }
 
   private scheduleRecordUpdate(record: ProtectionRecord): void {
@@ -588,7 +385,6 @@ export class ProtectionRenderer {
     if (this.listening) return;
     this.window.addEventListener("scroll", this.scheduleAllUpdates, true);
     this.window.addEventListener("resize", this.scheduleAllUpdates);
-    this.document.addEventListener("pointerdown", this.closeMenusForPointer, true);
     this.listening = true;
   }
 
@@ -608,10 +404,9 @@ export class ProtectionRenderer {
   }
 
   private stopListeningIfIdle(): void {
-    if (this.records.size > 0 || this.siteControl) return;
+    if (this.records.size > 0) return;
     this.window.removeEventListener("scroll", this.scheduleAllUpdates, true);
     this.window.removeEventListener("resize", this.scheduleAllUpdates);
-    this.document.removeEventListener("pointerdown", this.closeMenusForPointer, true);
     this.listening = false;
     if (this.frame !== null) this.cancelFrame(this.frame);
     this.frame = null;
@@ -620,6 +415,10 @@ export class ProtectionRenderer {
 
 function mediaLabel(kind: MediaKind): "image" | "video" {
   return kind === "native-video" || kind === "video-iframe" ? "video" : "image";
+}
+
+function optionsLabel(record: ProtectionRecord): string {
+  return record.blockedSubject ? "Reveal blocked subject" : "Reveal protected media";
 }
 
 function layerCompact(layer: HTMLElement): boolean {
@@ -649,6 +448,34 @@ function markProtected(candidate: MediaCandidate): void {
     "data-eclipse-goggles-protected",
     mediaLabel(candidate.kind),
   );
+}
+
+function isVisualKind(kind: MediaKind): boolean {
+  return kind === "image" || kind === "background-image";
+}
+
+function isSubstantiallyCoveredByIframe(
+  document: Document,
+  element: HTMLElement,
+  box: DOMRect,
+): boolean {
+  const area = box.width * box.height;
+  if (area <= 0) return false;
+
+  for (const frame of document.querySelectorAll("iframe")) {
+    if (frame === element) continue;
+    const frameBox = frame.getBoundingClientRect();
+    const intersectionWidth = Math.max(
+      0,
+      Math.min(box.right, frameBox.right) - Math.max(box.left, frameBox.left),
+    );
+    const intersectionHeight = Math.max(
+      0,
+      Math.min(box.bottom, frameBox.bottom) - Math.max(box.top, frameBox.top),
+    );
+    if ((intersectionWidth * intersectionHeight) / area >= 0.8) return true;
+  }
+  return false;
 }
 
 function showInTopLayer(host: HTMLElement): void {

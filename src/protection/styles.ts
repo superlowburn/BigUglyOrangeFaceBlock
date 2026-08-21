@@ -137,14 +137,6 @@ export const protectionStyles = `
   background: rgba(255, 255, 255, 0.10);
 }
 
-.eg-goggles-control {
-  position: absolute;
-  top: var(--eg-control-top, 12px);
-  right: var(--eg-control-right, 12px);
-  z-index: 3;
-}
-
-.eg-goggles,
 .eg-reprotect {
   appearance: none;
   display: grid;
@@ -161,21 +153,14 @@ export const protectionStyles = `
   font: inherit;
 }
 
-.eg-goggles {
-  padding: 0;
-  border-radius: 9px;
-}
-
 .eg-reprotect {
   border-radius: 50%;
 }
 
-.eg-goggles:hover,
 .eg-reprotect:hover {
   background: rgba(31, 33, 35, 0.90);
 }
 
-.eg-goggles svg,
 .eg-reprotect svg {
   display: block;
   overflow: visible;
@@ -186,94 +171,18 @@ export const protectionStyles = `
   stroke-linejoin: round;
 }
 
-.eg-goggles svg {
-  width: 28px;
-  height: 20px;
-}
-
 .eg-reprotect svg {
   width: 28px;
   height: 28px;
 }
 
-.eg-menu {
-  position: absolute;
-  top: calc(var(--eg-control-size, 44px) - 2px);
-  right: 0;
-  z-index: 4;
-  display: grid;
-  width: 204px;
-  padding: 4px;
-  color: #fff;
-  background: rgba(31, 33, 35, 0.94);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 10px 0 10px 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
-  backdrop-filter: blur(10px);
-}
-
-.eg-menu[hidden] {
-  display: none;
-}
-
-.eg-menu button {
-  min-height: 44px;
-  padding: 9px 10px;
-  color: #fff;
-  border: 0;
-  border-radius: 7px;
-  text-align: left;
-  background: transparent;
-  cursor: pointer;
-  font: 600 14px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-
-.eg-menu button + button {
-  color: #d8dadd;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 0 0 7px 7px;
-  font-weight: 500;
-}
-
-.eg-menu-brand {
-  display: grid;
-  gap: 1px;
-  padding: 9px 10px 8px;
-  color: #f5f6f7;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-  font-size: 12px;
-  line-height: 1.25;
-  text-align: left;
-  background: transparent;
-  cursor: pointer;
-}
-
-.eg-menu-brand strong {
-  font-size: 13px;
-  font-weight: 650;
-}
-
-.eg-menu-brand span {
-  color: #bdc1c5;
-}
-
-.eg-menu button:hover {
-  background: rgba(255, 255, 255, 0.11);
-}
-
-.eg-compact .eg-goggles,
 .eg-compact .eg-reprotect {
   padding: 5px;
 }
 
-.eg-compact .eg-goggles svg,
 .eg-compact .eg-reprotect svg {
   width: 22px;
   height: 22px;
-}
-
-.eg-compact .eg-goggles svg {
-  height: 16px;
 }
 
 .eg-compact .eg-info-control {
@@ -290,34 +199,12 @@ export const protectionStyles = `
 }
 
 .eg-reveal-surface:focus-visible,
-.eg-goggles:focus-visible,
 .eg-info-button:focus-visible,
 .eg-info-always:focus-visible,
-.eg-menu button:focus-visible,
 .eg-reprotect:focus-visible {
   outline: 2px solid #fff;
   outline-offset: 2px;
   box-shadow: 0 0 0 4px rgba(31, 33, 35, 0.72);
-}
-
-.eg-site-layer {
-  top: 12px;
-  right: 12px;
-  left: auto;
-  width: 44px;
-  height: 44px;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.eg-site-layer .eg-goggles-control {
-  top: 0;
-  right: 0;
-  pointer-events: auto;
-}
-
-.eg-layer.eg-menu-open {
-  overflow: visible;
 }
 
 .eg-layer.eg-revealed {

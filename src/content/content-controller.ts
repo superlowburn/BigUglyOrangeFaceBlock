@@ -6,7 +6,6 @@ import {
   ProtectionRenderer,
   type ProtectionHandle,
   type ProtectionOptions,
-  type SiteAllowedControlOptions,
 } from "../protection/renderer";
 import type {
   MediaCandidate,
@@ -36,8 +35,6 @@ export interface DocumentObserverPort {
 
 interface RendererPort {
   protect(candidate: MediaCandidate, options: ProtectionOptions): ProtectionHandle;
-  showSiteAllowedControl?(options: SiteAllowedControlOptions): void;
-  hideSiteAllowedControl?(): void;
 }
 
 interface NativeVideoPort {
@@ -89,10 +86,7 @@ export class ContentController {
   private readonly describe: (candidate: MediaCandidate) => string;
   private readonly development: boolean;
   private readonly logDiagnostic: (tagName: string, message: string) => void;
-  private readonly setSiteMode: (origin: string, mode: SiteMode) => void | Promise<void>;
   private readonly setDescriptionsVisible: (origin: string, visible: boolean) => void | Promise<void>;
-  private readonly openSettings: () => void | Promise<void>;
-  private readonly enableSiteControl: boolean;
   private readonly byElement = new WeakMap<Element, ProtectionRecord>();
   private readonly records = new Set<ProtectionRecord>();
   private mode: SiteMode = "trusted";
@@ -123,10 +117,7 @@ export class ContentController {
     this.development = dependencies.development ?? isDevelopmentRuntime();
     this.logDiagnostic = dependencies.logDiagnostic ??
       ((tagName, message) => console.warn(`Goggles: ${tagName}: ${message}`));
-    this.setSiteMode = dependencies.setSiteMode ?? (() => undefined);
     this.setDescriptionsVisible = dependencies.setDescriptionsVisible ?? (() => undefined);
-    this.openSettings = dependencies.openSettings ?? (() => undefined);
-    this.enableSiteControl = dependencies.enableSiteControl ?? true;
   }
 
   start(context: PolicyContext): void {
@@ -136,7 +127,6 @@ export class ContentController {
     this.mode = normalizeMode(context.mode);
     this.descriptionsVisible = context.descriptionsVisible ?? false;
     this.blockedSubjects = parseBlockedSubjects(context.blockedSubjects);
-    this.syncSiteControl();
     this.startObservation();
   }
 
@@ -145,7 +135,6 @@ export class ContentController {
     if (!this.started || mode === this.mode) return;
 
     this.mode = mode;
-    this.syncSiteControl();
     this.reconcileProtection();
   }
 
@@ -157,7 +146,6 @@ export class ContentController {
   stop(options: { restoreMedia?: boolean } = {}): void {
     this.stopObservation();
     this.clearProtection(options.restoreMedia ?? true);
-    this.renderer.hideSiteAllowedControl?.();
     if (options.restoreMedia === false) this.providerFrames.dispose?.();
     this.mode = "trusted";
     this.origin = null;
@@ -200,6 +188,20 @@ export class ContentController {
         }
 
         if (
+          existing.handle.isRevealed() &&
+          existing.candidate.kind !== "video-iframe"
+        ) {
+          existing.handle.update();
+          return;
+        }
+
+        if (existing.candidate.kind === "native-video") {
+          this.enforceProtection(existing.candidate);
+          existing.handle.update();
+          return;
+        }
+
+        if (
           existing.candidate.kind === "video-iframe" &&
           element instanceof HTMLIFrameElement
         ) {
@@ -225,7 +227,7 @@ export class ContentController {
       if (this.mode === "trusted") {
         const candidate = this.classify(element);
         if (candidate && candidateMatchesBlockedSubject(candidate, this.blockedSubjects)) {
-          this.createProtection(candidate);
+          this.createProtection(candidate, true);
           return;
         }
         if (isSupportedVideoFrame(element)) void this.providerFrames.trust?.(element);
@@ -244,7 +246,10 @@ export class ContentController {
     }
   }
 
-  private createProtection(candidate: MediaCandidate): void {
+  private createProtection(candidate: MediaCandidate, blockedSubject = false): void {
+    if (isVisualCandidate(candidate) && this.hasOverlappingVideoRecord(candidate)) return;
+    if (isVideoCandidate(candidate)) this.removeOverlappingVisualRecords(candidate);
+
     let prepared = false;
     try {
       const expectedProviderSource = this.prepareMedia(candidate);
@@ -252,6 +257,7 @@ export class ContentController {
       let record!: ProtectionRecord;
       const handle = this.renderer.protect(candidate, {
         description: this.describe(candidate),
+        blockedSubject,
         mode: this.mode,
         onReveal: () => {
           void this.releaseRecord(record).catch(() => {
@@ -259,9 +265,6 @@ export class ContentController {
             this.reportProviderFailure(candidate.element);
           });
         },
-        onRevealAll: () => this.revealAll(),
-        onAllowSite: () => this.requestSiteMode("trusted"),
-        onOpenSettings: () => void Promise.resolve(this.openSettings()).catch(() => undefined),
         onToggleDescriptions: () => this.toggleDescriptions(),
         descriptionsVisible: this.descriptionsVisible,
         onReprotect: () => this.enforceRecord(record),
@@ -279,8 +282,27 @@ export class ContentController {
     }
   }
 
-  private revealAll(): void {
-    for (const record of [...this.records]) record.handle.reveal();
+  private hasOverlappingVideoRecord(candidate: MediaCandidate): boolean {
+    for (const record of this.records) {
+      if (
+        isVideoCandidate(record.candidate) &&
+        sharesOverlappingMediaStack(candidate.element, record.candidate.element)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private removeOverlappingVisualRecords(candidate: MediaCandidate): void {
+    for (const record of [...this.records]) {
+      if (
+        isVisualCandidate(record.candidate) &&
+        sharesOverlappingMediaStack(record.candidate.element, candidate.element)
+      ) {
+        this.detachRecord(record, true);
+      }
+    }
   }
 
   private toggleDescriptions(): void {
@@ -292,22 +314,6 @@ export class ContentController {
     for (const record of this.records) {
       record.handle.setDescriptionVisible(this.descriptionsVisible);
     }
-  }
-
-  private requestSiteMode(mode: SiteMode): void {
-    if (!this.origin) return;
-    void Promise.resolve(this.setSiteMode(this.origin, mode)).catch(() => undefined);
-  }
-
-  private syncSiteControl(): void {
-    if (this.enableSiteControl && this.mode === "trusted") {
-      this.renderer.showSiteAllowedControl?.({
-        onProtectSite: () => this.requestSiteMode("protected"),
-        onOpenSettings: () => void Promise.resolve(this.openSettings()).catch(() => undefined),
-      });
-      return;
-    }
-    this.renderer.hideSiteAllowedControl?.();
   }
 
   private prepareMedia(candidate: MediaCandidate): string | null | undefined {
@@ -430,4 +436,50 @@ function replaceSource(frame: HTMLIFrameElement, source: string | null): void {
 
 function normalizeMode(mode: SiteMode): SiteMode {
   return mode === "strict" ? "protected" : mode;
+}
+
+function isVisualCandidate(candidate: MediaCandidate): boolean {
+  return candidate.kind === "image" || candidate.kind === "background-image";
+}
+
+function isVideoCandidate(candidate: MediaCandidate): boolean {
+  return candidate.kind === "native-video" || candidate.kind === "video-iframe";
+}
+
+function sharesOverlappingMediaStack(first: Element, second: Element): boolean {
+  if (first.ownerDocument !== second.ownerDocument || !sharesNearbyAncestor(first, second)) {
+    return false;
+  }
+
+  const firstBox = first.getBoundingClientRect();
+  const secondBox = second.getBoundingClientRect();
+  const smallerArea = Math.min(firstBox.width * firstBox.height, secondBox.width * secondBox.height);
+  const largerArea = Math.max(firstBox.width * firstBox.height, secondBox.width * secondBox.height);
+  if (smallerArea <= 0 || smallerArea / largerArea < 0.5) return false;
+
+  const intersectionWidth = Math.max(
+    0,
+    Math.min(firstBox.right, secondBox.right) - Math.max(firstBox.left, secondBox.left),
+  );
+  const intersectionHeight = Math.max(
+    0,
+    Math.min(firstBox.bottom, secondBox.bottom) - Math.max(firstBox.top, secondBox.top),
+  );
+  return (intersectionWidth * intersectionHeight) / smallerArea >= 0.8;
+}
+
+function sharesNearbyAncestor(first: Element, second: Element): boolean {
+  const firstAncestors = new Set<Element>();
+  let current: Element | null = first;
+  for (let depth = 0; current && current !== first.ownerDocument.body && depth < 8; depth += 1) {
+    firstAncestors.add(current);
+    current = current.parentElement;
+  }
+
+  current = second;
+  for (let depth = 0; current && current !== second.ownerDocument.body && depth < 8; depth += 1) {
+    if (firstAncestors.has(current)) return true;
+    current = current.parentElement;
+  }
+  return false;
 }

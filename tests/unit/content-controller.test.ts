@@ -68,15 +68,11 @@ function rendererHarness() {
     items.push({ candidate, options, handle, isRemoved: () => removed });
     return handle;
   });
-  const showSiteAllowedControl = vi.fn();
-  const hideSiteAllowedControl = vi.fn();
   return {
     protect,
     items,
     activeFor: (element: HTMLElement) =>
       items.filter((item) => item.candidate.element === element && !item.isRemoved()),
-    showSiteAllowedControl,
-    hideSiteAllowedControl,
   };
 }
 
@@ -178,7 +174,7 @@ describe("ContentController", () => {
     expect(harness.renderer.protect).toHaveBeenCalledTimes(1);
     expect(harness.renderer.protect).toHaveBeenCalledWith(
       candidate(trump, "image"),
-      expect.objectContaining({ mode: "trusted" }),
+      expect.objectContaining({ mode: "trusted", blockedSubject: true }),
     );
   });
 
@@ -419,45 +415,6 @@ describe("ContentController", () => {
     expect(harness.nativeVideo.reprotect).toHaveBeenCalledWith(first);
   });
 
-  it("reveals every currently protected item from any item's Reveal all action", () => {
-    const first = document.createElement("img");
-    const second = document.createElement("video");
-    document.body.append(first, second);
-    const harness = controllerHarness(
-      new Map<Element, MediaCandidate>([
-        [first, candidate(first, "image")],
-        [second, candidate(second, "native-video")],
-      ]),
-    );
-    harness.controller.start({ origin: "https://news.example", mode: "protected" });
-    harness.observer.emit([first, second]);
-
-    harness.renderer.items[0]?.options.onRevealAll();
-
-    expect(harness.renderer.items.every(({ handle }) => handle.isRevealed())).toBe(true);
-    expect(harness.nativeVideo.release).toHaveBeenCalledWith(second);
-  });
-
-  it("persists Trusted mode from a protected item's site action", () => {
-    const image = document.createElement("img");
-    document.body.append(image);
-    const setSiteMode = vi.fn();
-    const harness = controllerHarness(
-      new Map([[image, candidate(image, "image")]]),
-      { setSiteMode },
-    );
-    harness.controller.start({ origin: "https://news.example", mode: "protected" });
-    harness.observer.emit([image]);
-
-    const options = harness.renderer.items[0]?.options as ProtectionOptions & {
-      onAllowSite?: () => void;
-    };
-    expect(typeof options.onAllowSite).toBe("function");
-    options.onAllowSite?.();
-
-    expect(setSiteMode).toHaveBeenCalledWith("https://news.example", "trusted");
-  });
-
   it("persists the site description choice and applies it to current and future media", () => {
     const first = document.createElement("img");
     const second = document.createElement("img");
@@ -489,31 +446,6 @@ describe("ContentController", () => {
       descriptionsVisible?: boolean;
     };
     expect(secondOptions.descriptionsVisible).toBe(true);
-  });
-
-  it("keeps one site control in Trusted mode and restores Protected on request", () => {
-    const setSiteMode = vi.fn();
-    const harness = controllerHarness(new Map(), { setSiteMode });
-
-    harness.controller.start({ origin: "https://news.example", mode: "trusted" });
-
-    expect(harness.renderer.showSiteAllowedControl).toHaveBeenCalledTimes(1);
-    const options = harness.renderer.showSiteAllowedControl.mock.calls[0]?.[0] as
-      | { onProtectSite: () => void }
-      | undefined;
-    options?.onProtectSite();
-    expect(setSiteMode).toHaveBeenCalledWith("https://news.example", "protected");
-
-    harness.controller.applyMode("protected");
-    expect(harness.renderer.hideSiteAllowedControl).toHaveBeenCalled();
-  });
-
-  it("does not render the top-level site control inside child frames", () => {
-    const harness = controllerHarness(new Map(), { enableSiteControl: false });
-
-    harness.controller.start({ origin: "https://news.example", mode: "trusted" });
-
-    expect(harness.renderer.showSiteAllowedControl).not.toHaveBeenCalled();
   });
 
   it("gates a provider before rendering and releases or regates only that frame", () => {
@@ -728,26 +660,25 @@ describe("ContentController", () => {
     }
   });
 
-  it("restores native state when attribute reclassification fails and continues the batch", () => {
-    const brokenVideo = document.createElement("video");
+  it("keeps native protection during attribute churn and continues the batch", () => {
+    const video = document.createElement("video");
     const healthyImage = document.createElement("img");
-    document.body.append(brokenVideo, healthyImage);
-    const videoCandidate = candidate(brokenVideo, "native-video");
+    document.body.append(video, healthyImage);
+    const videoCandidate = candidate(video, "native-video");
     const imageCandidate = candidate(healthyImage, "image");
-    let failVideo = false;
     const classify = vi.fn((element: Element) => {
-      if (element === brokenVideo && failVideo) throw new Error("bad source");
-      if (element === brokenVideo) return videoCandidate;
+      if (element === video) return videoCandidate;
       return element === healthyImage ? imageCandidate : null;
     });
     const harness = controllerHarness(new Map(), { classify });
     harness.controller.start({ origin: "https://news.example", mode: "protected" });
-    harness.observer.emit([brokenVideo]);
-    failVideo = true;
+    harness.observer.emit([video]);
 
-    harness.observer.emit([brokenVideo, healthyImage], [brokenVideo]);
+    harness.observer.emit([video, healthyImage], [video]);
 
-    expect(harness.nativeVideo.restore).toHaveBeenCalledWith(brokenVideo);
+    expect(harness.nativeVideo.reprotect).toHaveBeenCalledWith(video);
+    expect(harness.nativeVideo.restore).not.toHaveBeenCalled();
+    expect(harness.renderer.items[0]?.handle.remove).not.toHaveBeenCalled();
     expect(harness.renderer.protect).toHaveBeenCalledTimes(2);
     expect(harness.renderer.items[1]?.candidate).toBe(imageCandidate);
   });

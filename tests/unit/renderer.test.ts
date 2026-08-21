@@ -58,25 +58,21 @@ function protect(
     kind?: MediaKind;
     mode?: SiteMode;
     onReveal?: () => void;
-    onRevealAll?: () => void;
-    onAllowSite?: () => void;
-    onOpenSettings?: () => void;
     onToggleDescriptions?: () => void;
     descriptionsVisible?: boolean;
     onReprotect?: () => void;
     description?: string;
+    blockedSubject?: boolean;
   } = {},
 ) {
   const protectionOptions = {
     description: options.description ?? "A black audio component",
     mode: options.mode ?? "protected",
     onReveal: options.onReveal ?? vi.fn(),
-    onRevealAll: options.onRevealAll ?? vi.fn(),
-    onAllowSite: options.onAllowSite ?? vi.fn(),
-    onOpenSettings: options.onOpenSettings ?? vi.fn(),
     onToggleDescriptions: options.onToggleDescriptions ?? vi.fn(),
     descriptionsVisible: options.descriptionsVisible ?? false,
     onReprotect: options.onReprotect ?? vi.fn(),
+    blockedSubject: options.blockedSubject ?? false,
   };
   return renderer.protect(candidate(element, options.kind), protectionOptions);
 }
@@ -112,7 +108,7 @@ describe("ProtectionRenderer", () => {
     expect(layer?.style.height).toBe("360px");
   });
 
-  it("exposes a direct reveal surface and a closed goggles menu adjacent to the media", () => {
+  it("renders direct reveal and description controls without a media menu", () => {
     const before = document.createElement("button");
     before.textContent = "Before";
     const image = document.createElement("img");
@@ -132,15 +128,23 @@ describe("ProtectionRenderer", () => {
     expect(layer?.querySelector(".eg-reveal-surface")?.getAttribute("aria-label")).toBe(
       "Reveal protected media: A black audio component",
     );
-    expect(layer?.querySelector(".eg-goggles")?.getAttribute("aria-expanded")).toBe("false");
-    expect(layer?.querySelector(".eg-menu")?.hasAttribute("hidden")).toBe(true);
-    expect(Array.from(layer?.querySelectorAll(".eg-menu > button:not(.eg-menu-brand)") ?? []).map((button) => button.textContent)).toEqual([
-      "Reveal image",
-      "Reveal all on page",
-      "Always show on this site",
-    ]);
-    expect(layer?.querySelector(".eg-menu-brand")?.textContent).toBe("Custom GogglesBlocked subjects and site rules");
-    expect(layer?.querySelector(".eg-goggles svg")?.getAttribute("aria-hidden")).toBe("true");
+    expect(layer?.querySelector(".eg-info-control")).not.toBeNull();
+    expect(layer?.querySelector(".eg-goggles-control")).toBeNull();
+    expect(layer?.querySelector(".eg-menu")).toBeNull();
+    expect(layer?.querySelector(".eg-reveal-all")).toBeNull();
+    expect(layer?.querySelector(".eg-allow-site")).toBeNull();
+  });
+
+  it("names a blocked subject on its reveal surface", () => {
+    const image = document.createElement("img");
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(20, 30, 640, 360));
+    document.body.append(image);
+    const renderer = new ProtectionRenderer();
+
+    protect(renderer, image, { blockedSubject: true });
+
+    expect(renderer.debugLayerFor(image)?.querySelector(".eg-reveal-surface")?.getAttribute("aria-label"))
+      .toBe("Reveal blocked subject: A black audio component");
   });
 
   it("uses one info button to preview and pin the full description without revealing", () => {
@@ -165,7 +169,7 @@ describe("ProtectionRenderer", () => {
     );
     expect(layer?.querySelector(".eg-info-description")?.textContent).toBe(description);
     expect(layer?.querySelector(".eg-info-always")?.textContent).toBe(
-      "Always show descriptions on this site",
+      "Show descriptions by default on this site",
     );
 
     info?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -208,7 +212,7 @@ describe("ProtectionRenderer", () => {
     expect(renderer.debugLayerFor(image)?.querySelector(".eg-info-control")?.classList)
       .toContain("eg-info-pinned");
     expect(renderer.debugLayerFor(image)?.querySelector(".eg-info-always")?.textContent)
-      .toBe("Stop always showing descriptions");
+      .toBe("Stop showing descriptions by default");
   });
 
   it("uses a compact thumbnail treatment at normal feed-thumbnail size", () => {
@@ -255,96 +259,6 @@ describe("ProtectionRenderer", () => {
     expect(layer?.style.getPropertyValue("--eg-frost-blur")).toBe(blur);
   });
 
-  it("opens settings from the Goggles brand row", () => {
-    const image = document.createElement("img");
-    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(0, 0, 640, 360));
-    document.body.append(image);
-    const onOpenSettings = vi.fn();
-    const renderer = new ProtectionRenderer({
-      trustedActivation: (event) => event instanceof MouseEvent && event.type === "click",
-    });
-    protect(renderer, image, { onOpenSettings });
-
-    renderer.debugLayerFor(image)?.querySelector(".eg-menu-brand")?.dispatchEvent(
-      new MouseEvent("click", { bubbles: true }),
-    );
-
-    expect(onOpenSettings).toHaveBeenCalledTimes(1);
-  });
-
-  it("opens the goggles menu and closes it when the pointer leaves the control", () => {
-    const image = document.createElement("img");
-    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(20, 30, 640, 360));
-    document.body.append(image);
-    const renderer = new ProtectionRenderer({
-      trustedActivation: (event) => event instanceof MouseEvent && event.type === "click",
-    });
-    protect(renderer, image);
-    const layer = renderer.debugLayerFor(image);
-    const goggles = layer?.querySelector<HTMLButtonElement>(".eg-goggles");
-    const menu = layer?.querySelector<HTMLElement>(".eg-menu");
-
-    goggles?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-
-    expect(goggles?.getAttribute("aria-expanded")).toBe("true");
-    expect(menu?.hasAttribute("hidden")).toBe(false);
-    expect(layer?.classList.contains("eg-menu-open")).toBe(true);
-
-    layer?.querySelector(".eg-goggles-control")?.dispatchEvent(new MouseEvent("mouseleave"));
-
-    expect(goggles?.getAttribute("aria-expanded")).toBe("false");
-    expect(menu?.hasAttribute("hidden")).toBe(true);
-    expect(layer?.classList.contains("eg-menu-open")).toBe(false);
-  });
-
-  it("closes an open goggles menu when the user clicks elsewhere", () => {
-    const image = document.createElement("img");
-    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(20, 30, 640, 360));
-    document.body.append(image);
-    const renderer = new ProtectionRenderer();
-    protect(renderer, image);
-    const layer = renderer.debugLayerFor(image);
-    const goggles = layer?.querySelector<HTMLButtonElement>(".eg-goggles");
-    const menu = layer?.querySelector<HTMLElement>(".eg-menu");
-    goggles?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-
-    document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, composed: true }));
-
-    expect(goggles?.getAttribute("aria-expanded")).toBe("false");
-    expect(menu?.hasAttribute("hidden")).toBe(true);
-  });
-
-  it("closes an open goggles menu with Escape and returns focus to its trigger", () => {
-    const image = document.createElement("img");
-    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(20, 30, 640, 360));
-    document.body.append(image);
-    const renderer = new ProtectionRenderer();
-    protect(renderer, image);
-    const layer = renderer.debugLayerFor(image);
-    const goggles = layer?.querySelector<HTMLButtonElement>(".eg-goggles");
-    const menu = layer?.querySelector<HTMLElement>(".eg-menu");
-    goggles?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-
-    menu?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-
-    expect(menu?.hasAttribute("hidden")).toBe(true);
-    expect(goggles?.getRootNode()).toBeInstanceOf(ShadowRoot);
-    expect((goggles?.getRootNode() as ShadowRoot).activeElement).toBe(goggles);
-  });
-
-  it("prevents pointer focus without blocking the later click activation", () => {
-    const image = document.createElement("img");
-    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(20, 30, 640, 360));
-    document.body.append(image);
-    const renderer = new ProtectionRenderer();
-    protect(renderer, image);
-    const goggles = renderer.debugLayerFor(image)?.querySelector<HTMLButtonElement>(".eg-goggles");
-
-    const uncancelled = goggles?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
-
-    expect(uncancelled).toBe(false);
-  });
-
   it("reveals linked media without activating its link", () => {
     const link = document.createElement("a");
     link.href = "/destination";
@@ -377,29 +291,6 @@ describe("ProtectionRenderer", () => {
     expect(linkActivation).not.toHaveBeenCalled();
     expect(documentActivation).not.toHaveBeenCalled();
     expect(onReveal).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps an opened media menu inside the visible viewport", () => {
-    vi.spyOn(window, "innerWidth", "get").mockReturnValue(427);
-    vi.spyOn(window, "innerHeight", "get").mockReturnValue(240);
-    const image = document.createElement("img");
-    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(-300, 20, 640, 360));
-    document.body.append(image);
-    const renderer = new ProtectionRenderer();
-    protect(renderer, image);
-    const layer = renderer.debugLayerFor(image)!;
-    const control = layer.querySelector<HTMLElement>(".eg-goggles-control")!;
-    const goggles = layer.querySelector<HTMLButtonElement>(".eg-goggles")!;
-    const menu = layer.querySelector<HTMLElement>(".eg-menu")!;
-    vi.spyOn(layer, "getBoundingClientRect").mockReturnValue(rect(-300, 20, 640, 360));
-    vi.spyOn(control, "getBoundingClientRect").mockReturnValue(rect(6, 30, 30, 30));
-    vi.spyOn(goggles, "getBoundingClientRect").mockReturnValue(rect(6, 30, 30, 30));
-    vi.spyOn(menu, "getBoundingClientRect").mockReturnValue(rect(0, 0, 204, 176));
-
-    goggles.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-
-    expect(Number.parseFloat(menu.style.left) + control.getBoundingClientRect().left).toBe(8);
-    expect(Number.parseFloat(menu.style.top) + control.getBoundingClientRect().top).toBe(8);
   });
 
   it("places a picture control after its nearest interactive button ancestor", () => {
@@ -445,68 +336,6 @@ describe("ProtectionRenderer", () => {
     expect(first.hasAttribute("data-eclipse-goggles-protected")).toBe(false);
     expect(secondHandle.isRevealed()).toBe(false);
     expect(second.getAttribute("data-eclipse-goggles-protected")).toBe("image");
-  });
-
-  it("offers Reveal all from every protected item", () => {
-    const image = document.createElement("img");
-    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(0, 0, 640, 360));
-    document.body.append(image);
-    const onRevealAll = vi.fn();
-    const renderer = new ProtectionRenderer({
-      trustedActivation: (event) => event instanceof MouseEvent && event.type === "click",
-    });
-    protect(renderer, image, { onRevealAll });
-
-    renderer.debugLayerFor(image)?.querySelector(".eg-reveal-all")?.dispatchEvent(
-      new MouseEvent("click", { bubbles: true }),
-    );
-
-    expect(onRevealAll).toHaveBeenCalledTimes(1);
-  });
-
-  it("offers a persistent site allow action from every protected item", () => {
-    const image = document.createElement("img");
-    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(0, 0, 640, 360));
-    document.body.append(image);
-    const onAllowSite = vi.fn();
-    const renderer = new ProtectionRenderer({
-      trustedActivation: (event) => event instanceof MouseEvent && event.type === "click",
-    });
-    protect(renderer, image, { onAllowSite });
-
-    renderer.debugLayerFor(image)?.querySelector(".eg-allow-site")?.dispatchEvent(
-      new MouseEvent("click", { bubbles: true }),
-    );
-
-    expect(onAllowSite).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps a site control available while the site is allowed", () => {
-    const onProtectSite = vi.fn();
-    const renderer = new ProtectionRenderer({
-      trustedActivation: (event) => event instanceof MouseEvent && event.type === "click",
-    });
-    const siteRenderer = renderer as ProtectionRenderer & {
-      showSiteAllowedControl?: (options: { onProtectSite: () => void }) => void;
-      hideSiteAllowedControl?: () => void;
-      debugSiteLayer?: () => HTMLElement | null;
-    };
-
-    expect(typeof siteRenderer.showSiteAllowedControl).toBe("function");
-    if (!siteRenderer.showSiteAllowedControl || !siteRenderer.debugSiteLayer) return;
-    siteRenderer.showSiteAllowedControl({ onProtectSite });
-    const layer = siteRenderer.debugSiteLayer();
-    const goggles = layer?.querySelector<HTMLButtonElement>(".eg-goggles");
-    goggles?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-
-    expect(goggles?.getAttribute("aria-label")).toBe("Goggles site options");
-    expect(layer?.querySelector(".eg-site-protect")?.textContent).toBe("Frost this site again");
-    expect(layer?.querySelector(".eg-menu-brand")?.textContent).toBe("Custom GogglesBlocked subjects and site rules");
-    layer?.querySelector(".eg-site-protect")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    expect(onProtectSite).toHaveBeenCalledTimes(1);
-
-    siteRenderer.hideSiteAllowedControl?.();
-    expect(siteRenderer.debugSiteLayer()).toBeNull();
   });
 
   it("rejects page-dispatched synthetic pointer activation", () => {
@@ -567,7 +396,7 @@ describe("ProtectionRenderer", () => {
     secondHandle.reveal();
 
     const protectAgain = renderer.debugLayerFor(first);
-    expect(protectAgain?.querySelector(".eg-reprotect")?.getAttribute("aria-label")).toBe("Protect again");
+    expect(protectAgain?.querySelector(".eg-reprotect")?.getAttribute("aria-label")).toBe("Frost again");
     protectAgain?.querySelector(".eg-reprotect")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
     expect(onFirstReprotect).toHaveBeenCalledTimes(1);
@@ -658,7 +487,7 @@ describe("ProtectionRenderer", () => {
     expect(layer?.querySelector(".eg-caption")).toBeNull();
     expect(layer?.querySelector(".eg-info-control")?.hasAttribute("hidden")).toBe(true);
     expect(layer?.querySelector(".eg-reveal-surface")?.getAttribute("aria-label")).toContain("A black audio component");
-    expect(layer?.querySelector(".eg-goggles")).not.toBeNull();
+    expect(layer?.querySelector(".eg-goggles-control")).toBeNull();
     expect(renderer.debugLayerFor(image)?.classList.contains("eg-compact")).toBe(true);
   });
 
@@ -678,7 +507,7 @@ describe("ProtectionRenderer", () => {
     expect(layer?.querySelector(".eg-caption")).toBeNull();
     expect(layer?.querySelector(".eg-info-control")?.hasAttribute("hidden")).toBe(true);
     expect(layer?.querySelector(".eg-reveal-surface")?.getAttribute("aria-label")).toContain("A black audio component");
-    expect(layer?.querySelector(".eg-goggles")).not.toBeNull();
+    expect(layer?.querySelector(".eg-goggles-control")).toBeNull();
   });
 
   it("watches revealed strict items and disposes the watch when they are re-protected", () => {

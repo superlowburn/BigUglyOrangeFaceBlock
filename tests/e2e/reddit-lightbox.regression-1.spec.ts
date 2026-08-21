@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 const extensionPath = resolve("dist");
 
-// Regression: Reddit lightboxes received duplicate frost, info, and Goggles controls.
+// Regression: Reddit lightboxes received duplicate frost and on-media controls.
 // Found by live Reddit QA on 2026-08-20.
 test("gives an overlapping Reddit lightbox stack one visible control set", async () => {
   const context = await chromium.launchPersistentContext("", {
@@ -11,6 +11,7 @@ test("gives an overlapping Reddit lightbox stack one visible control set", async
     viewport: { width: 711, height: 730 },
     args: [
       "--window-size=711,730",
+      "--window-position=-10000,-10000",
       `--disable-extensions-except=${extensionPath}`,
       `--load-extension=${extensionPath}`,
     ],
@@ -30,17 +31,13 @@ test("gives an overlapping Reddit lightbox stack one visible control set", async
       "data-eclipse-goggles-protected",
       "image",
     );
-    await expect(page.getByRole("button", { name: "Goggles reveal options" })).toHaveCount(1);
-    await expect(page.getByRole("button", { name: "Show image description" })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Show description" })).toHaveCount(1);
+    await expect(page.locator("[data-eclipse-goggles-root] .eg-goggles-control")).toHaveCount(0);
+    await expect(page.locator("[data-eclipse-goggles-root] .eg-menu")).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Goggles reveal options" }).click();
-    const menu = page.locator("[data-eclipse-goggles-root] .eg-menu");
-    const box = await menu.boundingBox();
-    expect(box).not.toBeNull();
-    expect(box!.x).toBeGreaterThanOrEqual(8);
-    expect(box!.x + box!.width).toBeLessThanOrEqual(703);
-    expect(box!.y).toBeGreaterThanOrEqual(8);
-    expect(box!.y + box!.height).toBeLessThanOrEqual(722);
+    await page.getByRole("button", { name: /Reveal protected media/ }).click();
+    await expect(page.locator("[data-eclipse-goggles-root] .eg-frost")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Frost again" })).toHaveCount(1);
   } finally {
     await context.close();
   }

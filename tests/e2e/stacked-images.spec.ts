@@ -11,6 +11,7 @@ test("protects only the meaningful foreground copy in a stacked image treatment"
     viewport: windowSize,
     args: [
       `--window-size=${windowSize.width},${windowSize.height}`,
+      "--window-position=-10000,-10000",
       `--disable-extensions-except=${extensionPath}`,
       `--load-extension=${extensionPath}`,
     ],
@@ -45,6 +46,7 @@ test("uses one frost layer for a Reddit video with a gradient control scrim", as
     viewport: windowSize,
     args: [
       `--window-size=${windowSize.width},${windowSize.height}`,
+      "--window-position=-10000,-10000",
       `--disable-extensions-except=${extensionPath}`,
       `--load-extension=${extensionPath}`,
     ],
@@ -57,6 +59,7 @@ test("uses one frost layer for a Reddit video with a gradient control scrim", as
 
     await expect(page.locator("[data-eclipse-goggles-protected]")).toHaveCount(1);
     await expect(page.locator("[data-eclipse-goggles-root]")).toHaveCount(1);
+    await expect(page.locator("[data-eclipse-goggles-root] .eg-goggles-control")).toHaveCount(0);
     await expect(page.locator("video")).toHaveAttribute(
       "data-eclipse-goggles-protected",
       "video",
@@ -65,13 +68,15 @@ test("uses one frost layer for a Reddit video with a gradient control scrim", as
       "data-eclipse-goggles-protected",
       "image",
     );
+    await expect(page.locator("[data-eclipse-goggles-root] .eg-goggles-control")).toHaveCount(0);
 
     await page.getByRole("button", {
       name: "Reveal protected media: Reddit native video",
     }).click();
 
     await expect(page.locator("[data-eclipse-goggles-protected]")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: /Reveal protected media/ })).toHaveCount(0);
+    await expect(page.locator("[data-eclipse-goggles-root] .eg-frost")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Frost again" })).toHaveCount(1);
   } finally {
     await context.close();
   }
@@ -83,6 +88,7 @@ test("reveals a linked Reddit thumbnail without activating its destination", asy
     viewport: windowSize,
     args: [
       `--window-size=${windowSize.width},${windowSize.height}`,
+      "--window-position=-10000,-10000",
       `--disable-extensions-except=${extensionPath}`,
       `--load-extension=${extensionPath}`,
     ],
@@ -106,12 +112,13 @@ test("reveals a linked Reddit thumbnail without activating its destination", asy
   }
 });
 
-test("keeps visible Goggles controls clickable above a hostile page stacking context", async () => {
+test("keeps the reveal surface clickable above a hostile page stacking context", async () => {
   const context = await chromium.launchPersistentContext("", {
     headless: false,
     viewport: windowSize,
     args: [
       `--window-size=${windowSize.width},${windowSize.height}`,
+      "--window-position=-10000,-10000",
       `--disable-extensions-except=${extensionPath}`,
       `--load-extension=${extensionPath}`,
     ],
@@ -121,9 +128,9 @@ test("keeps visible Goggles controls clickable above a hostile page stacking con
     await (context.serviceWorkers()[0] ?? context.waitForEvent("serviceworker"));
     const page = context.pages()[0] ?? await context.newPage();
     await page.goto("http://127.0.0.1:4173/stacking-context.html");
-    const goggles = page.getByRole("button", { name: "Goggles reveal options" });
-    const gogglesBox = await goggles.boundingBox();
-    expect(gogglesBox).not.toBeNull();
+    const reveal = page.getByRole("button", { name: /Reveal protected media/ });
+    const revealBox = await reveal.boundingBox();
+    expect(revealBox).not.toBeNull();
     await page.locator("#interceptor").evaluate((element, box) => {
       Object.assign((element as HTMLElement).style, {
         left: `${box!.x}px`,
@@ -132,10 +139,10 @@ test("keeps visible Goggles controls clickable above a hostile page stacking con
         height: `${box!.height}px`,
         right: "auto",
       });
-    }, gogglesBox);
-    await goggles.click({ timeout: 2_000 });
+    }, revealBox);
+    await reveal.click({ timeout: 2_000 });
 
-    await expect(page.locator("[data-eclipse-goggles-root] .eg-menu")).toBeVisible();
+    await expect(page.locator("[data-eclipse-goggles-root] .eg-frost")).toHaveCount(0);
     expect(await page.evaluate(() => (window as typeof window & {
       interceptorClicks: number;
     }).interceptorClicks)).toBe(0);
@@ -150,6 +157,7 @@ test("reveals a linked Reddit shadow card without activating its destination", a
     viewport: windowSize,
     args: [
       `--window-size=${windowSize.width},${windowSize.height}`,
+      "--window-position=-10000,-10000",
       `--disable-extensions-except=${extensionPath}`,
       `--load-extension=${extensionPath}`,
     ],

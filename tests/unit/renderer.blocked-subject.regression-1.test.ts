@@ -9,19 +9,17 @@ it("does not offer to trust an already Trusted site from a blocked-subject image
 
   renderer.protect({ element: image, kind: "image" }, {
     description: "Donald Trump at a campaign event",
+    blockedSubject: true,
     mode: "trusted",
     onReveal: vi.fn(),
-    onRevealAll: vi.fn(),
-    onAllowSite: vi.fn(),
-    onOpenSettings: vi.fn(),
     onToggleDescriptions: vi.fn(),
     descriptionsVisible: false,
     onReprotect: vi.fn(),
   });
 
   const layer = renderer.debugLayerFor(image);
-  expect(layer?.querySelector(".eg-allow-site")).toBeNull();
-  expect(layer?.querySelector(".eg-menu-brand")?.textContent).toBe(
-    "Custom GogglesBlocked subjects and site rules",
+  expect(layer?.querySelector(".eg-goggles-control")).toBeNull();
+  expect(layer?.querySelector(".eg-reveal-surface")?.getAttribute("aria-label")).toBe(
+    "Reveal blocked subject: Donald Trump at a campaign event",
   );
 });
