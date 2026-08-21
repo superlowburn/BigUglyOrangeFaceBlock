@@ -39,6 +39,7 @@ describe("mountOptions", () => {
     expect(root.querySelector("section h2")?.textContent).toBe("Blocked subjects");
     expect(root.textContent).toContain("Sites showing images and videos");
     expect(root.textContent).toContain("Blocked subjects stay frosted");
+    expect(root.textContent).toContain("Best effort: Goggles may miss or misidentify images.");
     expect(document.querySelector("#site-rules")?.textContent).toContain("example.com");
     expect(document.querySelector("#site-rules")?.textContent).not.toContain("frosted.example");
     expect(document.querySelector("#site-rules")?.textContent).not.toContain("legacy.example");
