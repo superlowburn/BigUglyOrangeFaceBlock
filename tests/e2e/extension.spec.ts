@@ -265,6 +265,7 @@ test("scales thumbnail controls and keeps small-media descriptions out of the wa
     await target.evaluate((node) => {
       Object.assign((node as HTMLElement).style, { width: "640px", height: "360px" });
     });
+    await scrollDockIntoView(target, layer);
     await expect(info).toBeVisible();
     await info.hover();
     await expect(layer.locator(".eg-info-preview")).toBeVisible();
@@ -281,6 +282,7 @@ test("scales thumbnail controls and keeps small-media descriptions out of the wa
     await target.evaluate((node) => {
       Object.assign((node as HTMLElement).style, { width: "640px", height: "360px" });
     });
+    await scrollDockIntoView(target, layer);
     await expect(layer.locator(".eg-info-panel")).toBeVisible();
   } finally {
     await closeExtension(extension);
