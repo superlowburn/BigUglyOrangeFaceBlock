@@ -2,9 +2,11 @@
 
 **The Goggles, they do something.**
 
-Goggles is a Chrome extension that frosts images and videos until you choose to reveal them. It gives you a moment of control before attention-grabbing, disturbing, or unwanted media appears.
+Goggles protects your eyes and mind by hiding images and videos—think AI gore, jump scares, rage bait, the works. Click the frost to show an image or video.
 
-Goggles does not try to determine whether an image was made by AI. It simply lets you choose what you see.
+Frost whole sites, whitelist sites, and block image subjects—like THE ORANGE ONE. /shudder
+
+Less eye bleach for everyone!
 
 ## What it does
 
