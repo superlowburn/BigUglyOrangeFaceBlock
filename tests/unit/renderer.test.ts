@@ -531,6 +531,23 @@ describe("ProtectionRenderer", () => {
     expect(renderer.debugLayerFor(image)?.style.height).toBe("280px");
   });
 
+  it("uses document coordinates so the browser scrolls frost with its image", () => {
+    vi.spyOn(window, "scrollX", "get").mockReturnValue(120);
+    vi.spyOn(window, "scrollY", "get").mockReturnValue(500);
+    const image = document.createElement("img");
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue(rect(20, 30, 640, 360));
+    document.body.append(image);
+    const renderer = new ProtectionRenderer();
+
+    protect(renderer, image);
+
+    const layer = renderer.debugLayerFor(image);
+    expect(layer?.getRootNode()).toBeInstanceOf(ShadowRoot);
+    expect(((layer?.getRootNode() as ShadowRoot).host as HTMLElement).style.position).toBe("absolute");
+    expect(layer?.style.left).toBe("140px");
+    expect(layer?.style.top).toBe("530px");
+  });
+
   it("deduplicates repeated public updates and applies the latest rectangle after the frame", () => {
     const frames = frameQueue();
     const image = document.createElement("img");

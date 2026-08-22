@@ -153,8 +153,15 @@ export class ProtectionRenderer {
     host.setAttribute("data-eclipse-goggles-root", "");
     host.setAttribute("popover", "manual");
     Object.assign(host.style, {
-      position: "fixed",
-      inset: "0",
+      position: "absolute",
+      left: "0",
+      top: "0",
+      width: "100vw",
+      height: "100vh",
+      margin: "0",
+      padding: "0",
+      border: "0",
+      overflow: "visible",
       zIndex: "2147483647",
       pointerEvents: "none",
     });
@@ -362,8 +369,8 @@ export class ProtectionRenderer {
       );
       const visibleTop = Math.max(box.top + topInset, 0);
       Object.assign(record.layer.style, {
-        left: `${Math.max(box.left, visibleRight - width - inset)}px`,
-        top: `${Math.max(box.top, Math.min(box.bottom - height, visibleTop + inset))}px`,
+        left: `${this.window.scrollX + Math.max(box.left, visibleRight - width - inset)}px`,
+        top: `${this.window.scrollY + Math.max(box.top, Math.min(box.bottom - height, visibleTop + inset))}px`,
         width: `${width}px`,
         height: `${height}px`,
       });
@@ -381,8 +388,8 @@ export class ProtectionRenderer {
     );
     const clippedTop = box.top + topInset;
     Object.assign(record.layer.style, {
-      left: `${box.left}px`,
-      top: `${clippedTop}px`,
+      left: `${this.window.scrollX + box.left}px`,
+      top: `${this.window.scrollY + clippedTop}px`,
       width: `${box.width}px`,
       height: `${Math.max(0, box.height - topInset)}px`,
     });

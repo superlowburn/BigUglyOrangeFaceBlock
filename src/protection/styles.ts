@@ -15,7 +15,7 @@ export const protectionStyles = `
   color: inherit;
   background: transparent;
   text-align: initial;
-  position: fixed;
+  position: absolute;
   z-index: 2147483647;
   overflow: hidden;
   pointer-events: auto;

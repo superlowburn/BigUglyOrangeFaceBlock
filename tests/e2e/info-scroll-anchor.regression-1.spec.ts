@@ -28,7 +28,15 @@ test("keeps the info button at the image's true bottom-left corner", async () =>
     expect(initialInfoBox).not.toBeNull();
     expect(initialInfoBox!.y).toBeGreaterThan(730);
 
-    await page.evaluate(() => window.scrollTo(0, 500));
+    const immediateScrollDelta = await page.evaluate(() => {
+      for (const top of [100, 260, 500]) window.scrollTo(0, top);
+      const target = document.querySelector("img")!.getBoundingClientRect();
+      const host = document.querySelector<HTMLElement>("[data-eclipse-goggles-root]")!;
+      const layer = host.shadowRoot!.querySelector<HTMLElement>(".eg-layer")!.getBoundingClientRect();
+      return Math.max(Math.abs(layer.left - target.left), Math.abs(layer.top - target.top));
+    });
+    expect(immediateScrollDelta).toBeLessThanOrEqual(1);
+
     await expect.poll(async () => {
       const [imageBox, infoBox] = await Promise.all([image.boundingBox(), info.boundingBox()]);
       if (!imageBox || !infoBox) return Number.POSITIVE_INFINITY;

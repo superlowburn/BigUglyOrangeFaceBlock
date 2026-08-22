@@ -10,13 +10,13 @@
 }
 
 body {
-  min-width: 304px;
+  min-width: 320px;
   margin: 0;
-  background: #f4f4f2;
+  background: #fff;
 }
 
 #app {
-  padding: 20px;
+  padding: 18px;
 }
 
 .popup-title {
@@ -26,40 +26,79 @@ body {
   letter-spacing: -0.025em;
 }
 
+.popup-site {
+  margin: 2px 0 14px;
+  color: #666a68;
+  font-size: 12px;
+  line-height: 17px;
+}
+
 .popup-switch {
-  position: relative;
   display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  align-items: center;
   width: 100%;
-  padding: 11px 38px 11px 12px;
-  border: 1px solid #d5d5d1;
-  border-radius: 10px;
+  padding: 14px 0;
+  border: solid #d5d5d1;
+  border-width: 1px 0;
   color: inherit;
-  background: #fff;
+  background: transparent;
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
 }
 
 .popup-switch:hover:not(:disabled) {
-  border-color: #a9aaa6;
-  background: #fafaf8;
+  background: #f7f7f4;
 }
 
-.popup-switch[aria-checked="true"] {
-  border-color: #5c625f;
-  background: #e7e9e6;
-  box-shadow: none;
+.popup-switch-copy {
+  display: grid;
+  gap: 2px;
 }
 
-.popup-switch[aria-checked="true"]::after {
-  content: "✓";
+.popup-switch-title,
+.popup-subjects-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.popup-switch-description,
+.popup-subjects-description {
+  color: #666a68;
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.popup-switch-control {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background: #b8bbb8;
+  transition: background-color 120ms ease;
+}
+
+.popup-switch-control::after {
+  content: "";
   position: absolute;
-  top: 50%;
-  right: 13px;
-  transform: translateY(-50%);
-  font-size: 17px;
-  font-weight: 800;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.24);
+  transition: transform 120ms ease;
+}
+
+.popup-switch[aria-checked="true"] .popup-switch-control {
+  background: #214f42;
+}
+
+.popup-switch[aria-checked="true"] .popup-switch-control::after {
+  transform: translateX(18px);
 }
 
 .popup-switch:disabled {
@@ -73,10 +112,22 @@ body {
 }
 
 .popup-subjects {
-  margin: 10px 0 0;
-  color: #666a68;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid #d5d5d1;
+}
+
+.popup-subjects-state {
+  align-self: center;
+  color: #214f42;
   font-size: 12px;
-  line-height: 17px;
+  font-weight: 750;
+}
+
+.popup-subjects-description {
+  grid-column: 1 / -1;
 }
 
 .popup-error {
@@ -93,17 +144,23 @@ body {
 
 .popup-settings {
   width: 100%;
-  margin-top: 14px;
-  padding: 10px 0 0;
+  margin-top: 0;
+  padding: 14px 0 4px;
   color: #424846;
   border: 0;
-  border-top: 1px solid #d5d5d1;
   background: transparent;
   font: inherit;
-  font-size: 12px;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 700;
   text-align: left;
   cursor: pointer;
+}
+
+.popup-settings::after {
+  content: "›";
+  float: right;
+  font-size: 18px;
+  line-height: 14px;
 }
 
 @media (prefers-reduced-motion: reduce) {

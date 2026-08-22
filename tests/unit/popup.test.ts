@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mountPopup, type PopupChromeApi } from "../../src/popup/popup";
 
-function policyContext(enabled: boolean) {
+function policyContext(enabled: boolean, mode: "protected" | "trusted" = "protected") {
   return {
     origin: "https://verified.example",
-    mode: "protected" as const,
+    mode,
     blockedSubjects: { enabled, keywords: ["Donald Trump"] },
   };
 }
@@ -62,21 +62,30 @@ describe("mountPopup", () => {
     });
     expect(root.querySelectorAll("h1")).toHaveLength(1);
     expect(root.querySelector("h1")?.textContent).toBe("Goggles");
-    expect(root.textContent).toContain("verified.example");
+    expect(root.querySelector(".popup-site")?.textContent).toBe("verified.example");
     expect(root.textContent).not.toContain("untrusted-tab-value.example");
 
     expect(root.querySelectorAll('[role="switch"]')).toHaveLength(1);
-    expect(root.textContent).toContain("Frost images and videos on verified.example");
-    expect(root.textContent).toContain("Blocked subjects — On everywhere");
-    expect(root.querySelector(".popup-settings")?.textContent).toBe("Settings");
+    expect(root.querySelector(".popup-switch-title")?.textContent).toBe("Frost this site");
+    expect(root.querySelector(".popup-switch-description")?.textContent).toBe(
+      "Images and videos require a click to reveal.",
+    );
+    expect(root.querySelector(".popup-subjects-title")?.textContent).toBe("Blocked subjects");
+    expect(root.querySelector(".popup-subjects-state")?.textContent).toBe("On");
+    expect(root.querySelector(".popup-subjects-description")?.textContent).toBe(
+      "Stay frosted on every site.",
+    );
+    expect(root.querySelector(".popup-settings")?.textContent).toBe("Open settings");
     expect(getSwitch(root).getAttribute("aria-checked")).toBe("true");
   });
 
   it("renders blocked subjects as off when the verified policy context disables them", async () => {
     await mountPopup(root, createChromeApi(vi.fn().mockResolvedValue(policyContext(false))));
 
-    expect(root.textContent).toContain("Blocked subjects — Off");
-    expect(root.textContent).not.toContain("On everywhere");
+    expect(root.querySelector(".popup-subjects-state")?.textContent).toBe("Off");
+    expect(root.querySelector(".popup-subjects-description")?.textContent).toBe(
+      "Turn on matching in Settings.",
+    );
   });
 
   it("shows ordinary media for the active tab when the switch is turned off", async () => {
@@ -100,6 +109,39 @@ describe("mountPopup", () => {
       });
       expect(protectionSwitch.getAttribute("aria-checked")).toBe("false");
     });
+  });
+
+  it("frosts ordinary media when the site switch is turned on", async () => {
+    const chromeApi = createChromeApi(
+      vi
+        .fn()
+        .mockResolvedValueOnce(policyContext(true, "trusted"))
+        .mockResolvedValueOnce({ origin: "https://verified.example", mode: "protected" }),
+    );
+    await mountPopup(root, chromeApi);
+    const protectionSwitch = getSwitch(root);
+    expect(protectionSwitch.getAttribute("aria-checked")).toBe("false");
+
+    protectionSwitch.click();
+
+    await vi.waitFor(() => {
+      expect(chromeApi.runtime.sendMessage).toHaveBeenLastCalledWith({
+        type: "policy:set-tab",
+        tabId: 7,
+        mode: "protected",
+        expectedOrigin: "https://verified.example",
+      });
+      expect(protectionSwitch.getAttribute("aria-checked")).toBe("true");
+    });
+  });
+
+  it("opens the full settings page from the navigation row", async () => {
+    const chromeApi = createChromeApi();
+    await mountPopup(root, chromeApi);
+
+    (root.querySelector(".popup-settings") as HTMLButtonElement).click();
+
+    expect(chromeApi.runtime.openOptionsPage).toHaveBeenCalledTimes(1);
   });
 
   it("rejects a successful-looking response for a different origin", async () => {

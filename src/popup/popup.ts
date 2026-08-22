@@ -57,17 +57,33 @@ export async function mountPopup(root: HTMLElement, chromeApi: PopupChromeApi): 
   document.title = TITLE;
 
   const heading = createTextElement("h1", "popup-title", TITLE);
+  const site = createTextElement("p", "popup-site", "");
   const protectionSwitch = createTextElement("button", "popup-switch", "");
   protectionSwitch.type = "button";
   protectionSwitch.setAttribute("role", "switch");
-  const blockedSubjects = createTextElement("p", "popup-subjects", "");
+  const switchCopy = createTextElement("span", "popup-switch-copy", "");
+  const switchTitle = createTextElement("span", "popup-switch-title", "Frost this site");
+  const switchDescription = createTextElement(
+    "span",
+    "popup-switch-description",
+    "Images and videos require a click to reveal.",
+  );
+  const switchControl = createTextElement("span", "popup-switch-control", "");
+  switchControl.setAttribute("aria-hidden", "true");
+  switchCopy.append(switchTitle, switchDescription);
+  protectionSwitch.append(switchCopy, switchControl);
+  const blockedSubjects = createTextElement("div", "popup-subjects", "");
+  const subjectsTitle = createTextElement("span", "popup-subjects-title", "Blocked subjects");
+  const subjectsState = createTextElement("span", "popup-subjects-state", "");
+  const subjectsDescription = createTextElement("span", "popup-subjects-description", "");
+  blockedSubjects.append(subjectsTitle, subjectsState, subjectsDescription);
   const error = createTextElement("p", "popup-error", "");
   error.setAttribute("role", "alert");
   error.hidden = true;
-  const settings = createTextElement("button", "popup-settings", "Settings");
+  const settings = createTextElement("button", "popup-settings", "Open settings");
   settings.type = "button";
   settings.addEventListener("click", () => void chromeApi.runtime.openOptionsPage());
-  root.append(heading, protectionSwitch, blockedSubjects, settings, error);
+  root.append(heading, site, protectionSwitch, error, blockedSubjects, settings);
 
   const [activeTab] = await chromeApi.tabs.query({ active: true, currentWindow: true });
   if (typeof activeTab?.id !== "number") {
@@ -91,9 +107,10 @@ export async function mountPopup(root: HTMLElement, chromeApi: PopupChromeApi): 
     error.hidden = false;
     return;
   }
-  blockedSubjects.textContent = initialResponse.blockedSubjects.enabled
-    ? "Blocked subjects — On everywhere"
-    : "Blocked subjects — Off";
+  subjectsState.textContent = initialResponse.blockedSubjects.enabled ? "On" : "Off";
+  subjectsDescription.textContent = initialResponse.blockedSubjects.enabled
+    ? "Stay frosted on every site."
+    : "Turn on matching in Settings.";
 
   let hostname: string;
   try {
@@ -103,13 +120,13 @@ export async function mountPopup(root: HTMLElement, chromeApi: PopupChromeApi): 
     error.hidden = false;
     return;
   }
+  site.textContent = hostname;
 
   let confirmedMode: Exclude<SiteMode, "strict"> =
     initialResponse.mode === "trusted" ? "trusted" : "protected";
 
   const selectMode = (selectedMode: Exclude<SiteMode, "strict">): void => {
     protectionSwitch.setAttribute("aria-checked", String(selectedMode === "protected"));
-    protectionSwitch.textContent = `Frost images and videos on ${hostname}`;
   };
 
   const setBusy = (busy: boolean): void => {
