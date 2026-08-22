@@ -16,3 +16,9 @@ Before returning any user-visible code change:
 - Never focus, type in, or otherwise interact with the user's browser address bar.
 - Offscreen coordinates and small headed windows are not acceptable substitutes for headless execution because macOS may still surface or focus them.
 - If a required extension test cannot run headlessly, do not run it without the user's explicit permission. Report the unverified check instead.
+
+## Push packaging — hard rule
+
+- Before every push, rebuild the extension and recreate the versioned `goggles-<version>.zip` from the contents of `dist`.
+- Verify the ZIP with `unzip -t` and include it in the same push, even when the source change is documentation-only.
+- The ZIP must contain `manifest.json` at its root so users can unzip it and load that folder directly in Chrome.
