@@ -75,22 +75,6 @@ After pulling a newer version from GitHub, run `npm install` and `npm run build`
 
 Turning frosting off for a website does not override enabled blocked subjects. A likely blocked-subject match stays frosted until you deliberately reveal that item.
 
-## Privacy
-
-Goggles works locally in your Chrome profile. It has no analytics or extension-owned server and does not upload images, page text, or usage events.
-
-The extension stores only its local settings, including per-site media choices, description preferences, and blocked-subject words. Deliberately revealing a YouTube or Vimeo embed allows that selected frame to contact its original provider with autoplay disabled.
-
-## Limitations
-
-- Chrome desktop only for now.
-- Subject matching is text-based, not facial recognition, so occasional misses are expected.
-- Canvas, WebGL, inline SVG, browser interface elements, and visuals inside closed shadow roots are not protected.
-- Small or ambiguous visuals may remain visible to avoid covering navigation, controls, badges, and avatars.
-- YouTube and Vimeo are the only specially recognized embedded-video providers.
-- Chrome internal pages and other restricted URLs do not allow extension content scripts.
-- Goggles is a consent and attention tool, not tamper-resistant parental-control or security software.
-
 ## Development
 
 ```sh
