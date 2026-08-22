@@ -62,11 +62,11 @@ export async function mountPopup(root: HTMLElement, chromeApi: PopupChromeApi): 
   protectionSwitch.type = "button";
   protectionSwitch.setAttribute("role", "switch");
   const switchCopy = createTextElement("span", "popup-switch-copy", "");
-  const switchTitle = createTextElement("span", "popup-switch-title", "Frost this site");
+  const switchTitle = createTextElement("span", "popup-switch-title", "Frost images and videos");
   const switchDescription = createTextElement(
     "span",
     "popup-switch-description",
-    "Images and videos require a click to reveal.",
+    "",
   );
   const switchControl = createTextElement("span", "popup-switch-control", "");
   switchControl.setAttribute("aria-hidden", "true");
@@ -126,7 +126,11 @@ export async function mountPopup(root: HTMLElement, chromeApi: PopupChromeApi): 
     initialResponse.mode === "trusted" ? "trusted" : "protected";
 
   const selectMode = (selectedMode: Exclude<SiteMode, "strict">): void => {
-    protectionSwitch.setAttribute("aria-checked", String(selectedMode === "protected"));
+    const protectedMode = selectedMode === "protected";
+    protectionSwitch.setAttribute("aria-checked", String(protectedMode));
+    switchDescription.textContent = protectedMode
+      ? "On — click an item to reveal it."
+      : "Off — ordinary media shows normally.";
   };
 
   const setBusy = (busy: boolean): void => {

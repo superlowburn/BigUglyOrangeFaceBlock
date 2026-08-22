@@ -607,6 +607,9 @@ test("secures native autoplay video and reveal never starts or unmutes it", asyn
       return document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2) === node;
     });
     expect(revealedTarget).toBe(true);
+
+    await video.click({ position: { x: 320, y: 180 } });
+    await expect.poll(() => video.evaluate((node) => (node as HTMLVideoElement).paused)).toBe(false);
   } finally {
     await closeExtension(extension);
   }

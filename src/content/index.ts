@@ -55,22 +55,44 @@ export async function bootstrapContentScript(
     if (!isPolicyContext(response)) throw new TypeError("Invalid policy response");
     if (disposed) return;
 
+    let currentMode = response.mode;
+    let policyUpdates = 0;
+    let started = false;
+    stopWatching = dependencies.watchPolicy(response.origin, (mode) => {
+      policyUpdates += 1;
+      currentMode = mode;
+      if (started) controller.applyMode(mode);
+    });
+    let currentBlockedSubjects: BlockedSubjectsConfig | null = null;
+    stopWatchingBlockedSubjects = dependencies.watchBlockedSubjects((config) => {
+      currentBlockedSubjects = config;
+      if (started) controller.applyBlockedSubjects(config);
+    });
+
+    const updatesBeforeConfirmation = policyUpdates;
+    const confirmedPolicy = await dependencies.sendMessage({ type: "policy:get-current" })
+      .catch(() => null);
+    if (
+      policyUpdates === updatesBeforeConfirmation &&
+      isPolicyContext(confirmedPolicy) &&
+      confirmedPolicy.origin === response.origin
+    ) {
+      currentMode = confirmedPolicy.mode;
+    }
+
     const descriptionsVisible = await dependencies.getDescriptionsVisible(response.origin)
       .catch(() => false);
     const blockedSubjects = await dependencies.getBlockedSubjects()
       .catch(() => ({ enabled: false, keywords: [] }));
+    currentBlockedSubjects ??= blockedSubjects;
     if (disposed) return;
     controller.start({
       ...response,
+      mode: currentMode,
       descriptionsVisible,
-      ...(blockedSubjects.enabled ? { blockedSubjects } : {}),
+      ...(currentBlockedSubjects.enabled ? { blockedSubjects: currentBlockedSubjects } : {}),
     });
-    stopWatching = dependencies.watchPolicy(response.origin, (mode) => {
-      controller.applyMode(mode);
-    });
-    stopWatchingBlockedSubjects = dependencies.watchBlockedSubjects((config) => {
-      controller.applyBlockedSubjects(config);
-    });
+    started = true;
   } catch {
     if (disposed) return;
     controller.start({

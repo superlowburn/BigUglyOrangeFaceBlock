@@ -21,6 +21,12 @@
       canvas.getContext("2d").fillRect(0, 0, 16, 9);
       video.srcObject = canvas.captureStream(2);
       video.play().catch(() => {});
+      new MutationObserver(() => {
+        if (!video.hasAttribute("data-eclipse-goggles-protected")) {
+          video.play().catch(() => {});
+        }
+      }).observe(video, { attributes: true, attributeFilter: ["data-eclipse-goggles-protected"] });
+      video.addEventListener("pointerdown", () => video.play().catch(() => {}));
     </script>
   </body>
 </html>

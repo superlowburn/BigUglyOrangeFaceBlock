@@ -900,6 +900,110 @@ describe("content-script bootstrap", () => {
     expect(harness.controller.applyMode).toHaveBeenCalledWith("trusted");
   });
 
+  it("starts with a policy change received while preferences are still loading", async () => {
+    let resolveDescriptions: ((visible: boolean) => void) | undefined;
+    const descriptions = new Promise<boolean>((resolve) => {
+      resolveDescriptions = resolve;
+    });
+    let listener: ((mode: SiteMode) => void) | undefined;
+    const harness = bootstrapHarness({
+      getDescriptionsVisible: vi.fn(() => descriptions),
+      watchPolicy: vi.fn((_origin, next) => {
+        listener = next;
+        return vi.fn();
+      }),
+    });
+
+    const bootstrapping = bootstrapContentScript(harness.dependencies);
+    await vi.waitFor(() => expect(listener).toBeTypeOf("function"));
+    listener?.("trusted");
+    resolveDescriptions?.(false);
+    await bootstrapping;
+
+    expect(harness.controller.start).toHaveBeenCalledWith({
+      origin: "https://top.example",
+      mode: "trusted",
+      descriptionsVisible: false,
+    });
+    expect(harness.controller.applyMode).not.toHaveBeenCalled();
+  });
+
+  it("confirms the current policy after subscribing so an earlier change is not missed", async () => {
+    const sendMessage = vi.fn()
+      .mockResolvedValueOnce({ origin: "https://top.example", mode: "protected" })
+      .mockResolvedValueOnce({ origin: "https://top.example", mode: "trusted" });
+    const harness = bootstrapHarness({
+      sendMessage,
+    });
+
+    await bootstrapContentScript(harness.dependencies);
+
+    expect(sendMessage).toHaveBeenCalledTimes(2);
+    expect(harness.controller.start).toHaveBeenCalledWith({
+      origin: "https://top.example",
+      mode: "trusted",
+      descriptionsVisible: false,
+    });
+  });
+
+  it("does not let a stale confirmation overwrite a newer policy event", async () => {
+    let resolveConfirmation: ((value: unknown) => void) | undefined;
+    const confirmation = new Promise<unknown>((resolve) => {
+      resolveConfirmation = resolve;
+    });
+    let listener: ((mode: SiteMode) => void) | undefined;
+    const harness = bootstrapHarness({
+      sendMessage: vi.fn()
+        .mockResolvedValueOnce({ origin: "https://top.example", mode: "protected" })
+        .mockImplementationOnce(() => confirmation),
+      watchPolicy: vi.fn((_origin, next) => {
+        listener = next;
+        return vi.fn();
+      }),
+    });
+
+    const bootstrapping = bootstrapContentScript(harness.dependencies);
+    await vi.waitFor(() => expect(listener).toBeTypeOf("function"));
+    listener?.("trusted");
+    resolveConfirmation?.({ origin: "https://top.example", mode: "protected" });
+    await bootstrapping;
+
+    expect(harness.controller.start).toHaveBeenCalledWith({
+      origin: "https://top.example",
+      mode: "trusted",
+      descriptionsVisible: false,
+    });
+  });
+
+  it("starts with a blocked-subject change received while preferences are loading", async () => {
+    let resolveSubjects: ((config: { enabled: boolean; keywords: string[] }) => void) | undefined;
+    const subjects = new Promise<{ enabled: boolean; keywords: string[] }>((resolve) => {
+      resolveSubjects = resolve;
+    });
+    let listener: ((config: { enabled: boolean; keywords: string[] }) => void) | undefined;
+    const harness = bootstrapHarness({
+      getBlockedSubjects: vi.fn(() => subjects),
+      watchBlockedSubjects: vi.fn((next) => {
+        listener = next;
+        return vi.fn();
+      }),
+    });
+
+    const bootstrapping = bootstrapContentScript(harness.dependencies);
+    await vi.waitFor(() => expect(listener).toBeTypeOf("function"));
+    listener?.({ enabled: true, keywords: ["Donald Trump"] });
+    resolveSubjects?.({ enabled: false, keywords: [] });
+    await bootstrapping;
+
+    expect(harness.controller.start).toHaveBeenCalledWith({
+      origin: "https://top.example",
+      mode: "strict",
+      descriptionsVisible: false,
+      blockedSubjects: { enabled: true, keywords: ["Donald Trump"] },
+    });
+    expect(harness.controller.applyBlockedSubjects).not.toHaveBeenCalled();
+  });
+
   it("starts with the permanent description choice for the top origin", async () => {
     const getDescriptionsVisible = vi.fn().mockResolvedValue(true);
     const harness = bootstrapHarness({ getDescriptionsVisible });

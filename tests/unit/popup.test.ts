@@ -66,9 +66,9 @@ describe("mountPopup", () => {
     expect(root.textContent).not.toContain("untrusted-tab-value.example");
 
     expect(root.querySelectorAll('[role="switch"]')).toHaveLength(1);
-    expect(root.querySelector(".popup-switch-title")?.textContent).toBe("Frost this site");
+    expect(root.querySelector(".popup-switch-title")?.textContent).toBe("Frost images and videos");
     expect(root.querySelector(".popup-switch-description")?.textContent).toBe(
-      "Images and videos require a click to reveal.",
+      "On — click an item to reveal it.",
     );
     expect(root.querySelector(".popup-subjects-title")?.textContent).toBe("Blocked subjects");
     expect(root.querySelector(".popup-subjects-state")?.textContent).toBe("On");
@@ -108,6 +108,9 @@ describe("mountPopup", () => {
         expectedOrigin: "https://verified.example",
       });
       expect(protectionSwitch.getAttribute("aria-checked")).toBe("false");
+      expect(root.querySelector(".popup-switch-description")?.textContent).toBe(
+        "Off — ordinary media shows normally.",
+      );
     });
   });
 
@@ -132,6 +135,9 @@ describe("mountPopup", () => {
         expectedOrigin: "https://verified.example",
       });
       expect(protectionSwitch.getAttribute("aria-checked")).toBe("true");
+      expect(root.querySelector(".popup-switch-description")?.textContent).toBe(
+        "On — click an item to reveal it.",
+      );
     });
   });
 
@@ -158,6 +164,9 @@ describe("mountPopup", () => {
 
     await vi.waitFor(() => {
       expect(protectionSwitch.getAttribute("aria-checked")).toBe("true");
+      expect(root.querySelector(".popup-switch-description")?.textContent).toBe(
+        "On — click an item to reveal it.",
+      );
       expect(root.querySelector('[role="alert"]')?.textContent).toBe(
         "Could not update protection. Try again.",
       );
