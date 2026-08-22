@@ -1,6 +1,6 @@
 # Goggles
 
-**No disturbing surprises.**
+**The Goggles, they do something.**
 
 Goggles is a Chrome extension that frosts images and videos until you choose to reveal them. It gives you a moment of control before attention-grabbing, disturbing, or unwanted media appears.
 
