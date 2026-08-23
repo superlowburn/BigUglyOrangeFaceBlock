@@ -9,8 +9,7 @@ import {
 } from "../protection/renderer";
 import type {
   MediaCandidate,
-  PolicyContext,
-  SiteMode,
+  ProtectionContext,
 } from "../shared/media-types";
 import {
   candidateMatchesBlockedSubject,
@@ -64,10 +63,7 @@ export interface ContentControllerDependencies {
   resolveDescription?: (candidate: MediaCandidate) => string;
   development?: boolean;
   logDiagnostic?: (tagName: string, message: string) => void;
-  setSiteMode?: (origin: string, mode: SiteMode) => void | Promise<void>;
   setDescriptionsVisible?: (origin: string, visible: boolean) => void | Promise<void>;
-  openSettings?: () => void | Promise<void>;
-  enableSiteControl?: boolean;
 }
 
 interface ProtectionRecord {
@@ -89,7 +85,6 @@ export class ContentController {
   private readonly setDescriptionsVisible: (origin: string, visible: boolean) => void | Promise<void>;
   private readonly byElement = new WeakMap<Element, ProtectionRecord>();
   private readonly records = new Set<ProtectionRecord>();
-  private mode: SiteMode = "trusted";
   private origin: string | null = null;
   private descriptionsVisible = true;
   private blockedSubjects = parseBlockedSubjects(null);
@@ -116,26 +111,17 @@ export class ContentController {
     this.describe = dependencies.resolveDescription ?? resolveDescription;
     this.development = dependencies.development ?? isDevelopmentRuntime();
     this.logDiagnostic = dependencies.logDiagnostic ??
-      ((tagName, message) => console.warn(`Goggles: ${tagName}: ${message}`));
+      ((tagName, message) => console.warn(`Big Ugly Orange Face: ${tagName}: ${message}`));
     this.setDescriptionsVisible = dependencies.setDescriptionsVisible ?? (() => undefined);
   }
 
-  start(context: PolicyContext): void {
+  start(context: ProtectionContext): void {
     if (this.started) this.stop();
     this.started = true;
     this.origin = context.origin;
-    this.mode = normalizeMode(context.mode);
     this.descriptionsVisible = context.descriptionsVisible ?? false;
     this.blockedSubjects = parseBlockedSubjects(context.blockedSubjects);
     this.startObservation();
-  }
-
-  applyMode(mode: SiteMode): void {
-    mode = normalizeMode(mode);
-    if (!this.started || mode === this.mode) return;
-
-    this.mode = mode;
-    this.reconcileProtection();
   }
 
   applyBlockedSubjects(config: BlockedSubjectsConfig): void {
@@ -147,7 +133,6 @@ export class ContentController {
     this.stopObservation();
     this.clearProtection(options.restoreMedia ?? true);
     if (options.restoreMedia === false) this.providerFrames.dispose?.();
-    this.mode = "trusted";
     this.origin = null;
     this.started = false;
   }
@@ -224,22 +209,13 @@ export class ContentController {
       }
 
       if (!element.isConnected) return;
-      if (this.mode === "trusted") {
-        const candidate = this.classify(element);
-        if (candidate && candidateMatchesBlockedSubject(candidate, this.blockedSubjects)) {
-          this.createProtection(candidate);
-          return;
-        }
-        if (isSupportedVideoFrame(element)) void this.providerFrames.trust?.(element);
-        return;
-      }
       const candidate = this.classify(element);
-      if (!candidate) {
-        if (detachedCandidate) this.restoreMedia(detachedCandidate);
+      if (candidate && candidateMatchesBlockedSubject(candidate, this.blockedSubjects)) {
+        this.createProtection(candidate);
         return;
       }
-      this.createProtection(candidate);
-      detachedCandidate = null;
+      if (detachedCandidate) this.restoreMedia(detachedCandidate);
+      if (isSupportedVideoFrame(element)) void this.providerFrames.trust?.(element);
     } catch {
       if (detachedCandidate) this.restoreMedia(detachedCandidate);
       this.reportCandidateFailure(element);
@@ -248,7 +224,6 @@ export class ContentController {
 
   private createProtection(
     candidate: MediaCandidate,
-    blockedSubject = candidateMatchesBlockedSubject(candidate, this.blockedSubjects),
   ): void {
     if (isVisualCandidate(candidate) && this.hasOverlappingVideoRecord(candidate)) return;
     if (isVideoCandidate(candidate)) this.removeOverlappingVisualRecords(candidate);
@@ -260,8 +235,6 @@ export class ContentController {
       let record!: ProtectionRecord;
       const handle = this.renderer.protect(candidate, {
         description: this.describe(candidate),
-        blockedSubject,
-        mode: this.mode,
         onReveal: () => {
           void this.releaseRecord(record).catch(() => {
             record.handle.reprotect();
@@ -405,11 +378,11 @@ export class ContentController {
 
   private reconcileProtection(): void {
     for (const record of [...this.records]) {
-      const blockedSubject = candidateMatchesBlockedSubject(record.candidate, this.blockedSubjects);
-      if (!record.candidate.element.isConnected || (this.mode === "trusted" && !blockedSubject)) {
+      if (
+        !record.candidate.element.isConnected ||
+        !candidateMatchesBlockedSubject(record.candidate, this.blockedSubjects)
+      ) {
         this.detachRecord(record, true);
-      } else {
-        record.handle.setBlockedSubject(blockedSubject);
       }
     }
     this.observer.scan(this.document);
@@ -433,10 +406,6 @@ function isDevelopmentRuntime(): boolean {
 function replaceSource(frame: HTMLIFrameElement, source: string | null): void {
   if (source === null) frame.removeAttribute("src");
   else frame.setAttribute("src", source);
-}
-
-function normalizeMode(mode: SiteMode): SiteMode {
-  return mode === "strict" ? "protected" : mode;
 }
 
 function isVisualCandidate(candidate: MediaCandidate): boolean {

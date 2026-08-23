@@ -289,7 +289,7 @@ describe("DocumentObserver", () => {
 
     const image = document.createElement("img");
     host.attachShadow({ mode: "open" }).append(image);
-    host.dispatchEvent(new CustomEvent("eclipse-goggles-open-shadow", { bubbles: true }));
+    host.dispatchEvent(new CustomEvent("buof-open-shadow", { bubbles: true }));
     frames.flush();
 
     expect(onCandidates.mock.calls.flatMap(([elements]) => elements)).toContain(image);

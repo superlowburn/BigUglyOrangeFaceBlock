@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Goggles",
-  "description": "Frost images and videos until you choose to reveal them.",
+  "name": "Big Ugly Orange Face",
+  "description": "Frost likely matches for subjects you choose.",
   "version": "0.1.0",
   "icons": {
     "16": "icons/icon16.png",
@@ -9,7 +9,7 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": ["storage", "activeTab", "declarativeNetRequestWithHostAccess", "webNavigation"],
+  "permissions": ["storage", "declarativeNetRequestWithHostAccess", "webNavigation"],
   "host_permissions": [
     "https://www.youtube.com/*",
     "https://www.youtube-nocookie.com/*",

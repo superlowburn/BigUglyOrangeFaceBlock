@@ -82,7 +82,7 @@ export class ProviderRequestGate {
     if (!parsed) throw new TypeError("Unsupported provider URL");
 
     if (disableAutoplay) parsed.searchParams.set("autoplay", "0");
-    parsed.searchParams.set("eg_eclipse_goggles", this.token());
+    parsed.searchParams.set("buof_grant", this.token());
     const grantId = this.uniqueRuleId();
     const requestUrl = new URL(parsed.href);
     requestUrl.hash = "";

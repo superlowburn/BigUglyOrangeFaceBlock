@@ -27,7 +27,7 @@ const relevantAttributes = [
   "title",
   "aria-label",
 ] as const;
-const openShadowEvent = "eclipse-goggles-open-shadow";
+const openShadowEvent = "buof-open-shadow";
 
 export class DocumentObserver {
   private readonly document: Document;
@@ -289,6 +289,6 @@ function isPlausibleResizeCandidate(element: Element): boolean {
 }
 
 function isExtensionOwned(element: Element): boolean {
-  return element.hasAttribute("data-eclipse-goggles-root") ||
-    element.closest("[data-eclipse-goggles-root]") !== null;
+  return element.hasAttribute("data-buof-root") ||
+    element.closest("[data-buof-root]") !== null;
 }

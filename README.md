@@ -1,88 +1,42 @@
-# Goggles
+# Big Ugly Orange Face
 
-**The Goggles, they do something.**
+Big Ugly Orange Face is a Chrome extension that frosts likely matches for subjects you choose. Ordinary images and videos remain visible.
 
-Goggles protects your eyes and mind by hiding images and videos—think AI gore, jump scares, rage bait, the works. Click the frost to show an image or video.
-
-Frost whole sites, whitelist sites, and block image subjects—like THE ORANGE ONE. /shudder
-
-Less eye bleach for everyone!
+The built-in preset targets Donald Trump using local page evidence such as descriptions, filenames, captions, links, nearby titles, and video posters. Matching is best effort: the extension can miss an image or frost an unrelated one. It does not perform face recognition or upload page content.
 
 ## What it does
 
-- Frosts meaningful images and videos on ordinary web pages.
-- Reveals one item when you click its frosting.
-- Lets you frost or show ordinary media separately for each website.
-- Can keep likely images of selected subjects frosted even on sites where ordinary media is shown.
-- Shows available image descriptions without revealing the image.
-- Pauses and mutes protected native videos.
-- Withholds recognized YouTube and Vimeo embeds until you reveal them.
-- Stores settings locally and does not upload images, page text, or browsing activity.
+- Frosts likely subject matches on every website.
+- Reveals one frosted item when you click it.
+- Lets you frost that item again.
+- Applies subject toggles and matching-word edits to open pages.
+- Pauses and mutes matched native videos.
+- Withholds matched YouTube and Vimeo embeds until you reveal them.
+- Stores settings locally.
 
-Blocked-subject matching uses descriptions, filenames, captions, links, and nearby titles. It is deliberately a best-effort feature: Goggles may miss an image or frost an unrelated one.
+## Install from source
 
-## Author's statement
-
-> I made Goggles because I hate exaggerated AI images, AI-manufactured attention-grabbing rage bait, and all the other nonsense I am exposed to the moment I open Reddit or another social network. I also hated seeing Trump's big, orange, dumb face everywhere. I wanted the choice to look instead of having every image forced on me.
-
-## Install from GitHub
-
-Goggles is not yet available in the Chrome Web Store. You can install it manually in Chrome.
-
-### Download a packaged release
-
-When a packaged release is available, download `goggles-<version>.zip` from the [Releases page](https://github.com/superlowburn/Goggles/releases), unzip it, and use the resulting folder in the Chrome steps below.
-
-Do not use GitHub's automatically generated **Source code (zip)** as the extension package. It contains the source but not the built extension.
-
-### Build from the repository
-
-You need [Node.js 22 or newer](https://nodejs.org/).
-
-Using Git:
+You need Node.js 22 or newer.
 
 ```sh
-git clone https://github.com/superlowburn/Goggles.git
-cd Goggles
-npm install
+npm ci
 npm run build
 ```
 
-Or choose **Code → Download ZIP** on GitHub, unzip the source, open that folder in Terminal, and run:
+In Chrome, open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**, and select this repository's `dist` folder.
 
-```sh
-npm install
-npm run build
-```
+## Use
 
-### Load Goggles in Chrome
-
-1. Open `chrome://extensions`.
-2. Turn on **Developer mode**.
-3. Click **Load unpacked**.
-4. Select the repository's `dist` folder.
-5. Pin Goggles from Chrome's Extensions menu if you want its site control to remain visible.
-
-After pulling a newer version from GitHub, run `npm install` and `npm run build` again, then click **Reload** on the Goggles card in `chrome://extensions`.
-
-## Using Goggles
-
-- Click a frosted image or video to reveal that item.
-- Click **Frost again** to cover a revealed item again.
-- Click the Goggles toolbar icon to turn ordinary-media frosting on or off for the current website.
-- Open **Settings** to configure blocked subjects and review sites where ordinary media is shown.
-- Use the small information control on sufficiently large media to read its available description.
-
-Turning frosting off for a website does not override enabled blocked subjects. A likely blocked-subject match stays frosted until you deliberately reveal that item.
+1. Open the extension's Settings page.
+2. Turn on **Donald Trump** under **Subjects to frost**.
+3. Edit the matching words if needed.
+4. Click a frosted item to reveal it; use **Frost again** to cover it again.
 
 ## Development
 
 ```sh
-npm install
-npm run build
+npm ci
 npm run verify
 ```
 
-`npm run verify` runs TypeScript checks, unit tests, a production build, and the loaded-extension Playwright suite.
-
-The production extension is built into `dist/`. Load that folder in Chrome while developing.
+The production extension is built into `dist/`.

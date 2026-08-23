@@ -1,4 +1,4 @@
-const eventName = "eclipse-goggles-open-shadow";
+const eventName = "buof-open-shadow";
 const originalAttachShadow = Element.prototype.attachShadow;
 
 function attachShadow(

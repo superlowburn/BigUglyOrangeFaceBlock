@@ -1,5 +1,4 @@
-import type { MediaCandidate, MediaKind, SiteMode } from "../shared/media-types";
-import { StrictRevealGuard } from "./strict-guard";
+import type { MediaCandidate, MediaKind } from "../shared/media-types";
 import { protectionStyles } from "./styles";
 
 export interface ProtectionHandle {
@@ -7,15 +6,12 @@ export interface ProtectionHandle {
   reprotect(): void;
   remove(): void;
   update(): void;
-  setBlockedSubject(blocked: boolean): void;
   setDescriptionVisible(visible: boolean): void;
   isRevealed(): boolean;
 }
 
 export interface ProtectionOptions {
   description: string;
-  blockedSubject?: boolean;
-  mode: SiteMode;
   onReveal: () => void;
   onToggleDescriptions: () => void;
   descriptionsVisible: boolean;
@@ -28,13 +24,11 @@ export interface RendererEnvironment {
   requestAnimationFrame?: (callback: FrameRequestCallback) => number;
   cancelAnimationFrame?: (handle: number) => void;
   trustedActivation?: (event: Event) => boolean;
-  createStrictGuard?: () => Pick<StrictRevealGuard, "watch">;
 }
 
 interface ProtectionRecord {
   candidate: MediaCandidate;
   description: string;
-  blockedSubject: boolean;
   host: HTMLElement;
   layer: HTMLDivElement;
   onReveal: () => void;
@@ -42,10 +36,8 @@ interface ProtectionRecord {
   onReprotect: () => void;
   descriptionVisible: boolean;
   pageDescriptionsVisible: boolean;
-  mode: SiteMode;
   revealed: boolean;
   removed: boolean;
-  stopStrictWatch: (() => void) | null;
   handle: ProtectionHandle;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
@@ -66,7 +58,6 @@ export class ProtectionRenderer {
   private readonly requestFrame: (callback: FrameRequestCallback) => number;
   private readonly cancelFrame: (handle: number) => void;
   private readonly trustedActivation: (event: Event) => boolean;
-  private readonly createStrictGuard: () => Pick<StrictRevealGuard, "watch">;
   private readonly records = new Map<HTMLElement, ProtectionRecord>();
   private readonly dirtyRecords = new Set<ProtectionRecord>();
   private frame: number | null = null;
@@ -78,7 +69,6 @@ export class ProtectionRenderer {
     this.requestFrame = environment.requestAnimationFrame ?? this.window.requestAnimationFrame.bind(this.window);
     this.cancelFrame = environment.cancelAnimationFrame ?? this.window.cancelAnimationFrame.bind(this.window);
     this.trustedActivation = environment.trustedActivation ?? isTrustedActivation;
-    this.createStrictGuard = environment.createStrictGuard ?? (() => new StrictRevealGuard());
   }
 
   protect(candidate: MediaCandidate, options: ProtectionOptions): ProtectionHandle {
@@ -87,7 +77,7 @@ export class ProtectionRenderer {
 
     const { host, shadow } = this.createRoot(candidate.element);
     const layer = this.document.createElement("div");
-    layer.className = "eg-layer";
+    layer.className = "buof-layer";
     shadow.append(layer);
 
     let record!: ProtectionRecord;
@@ -96,7 +86,6 @@ export class ProtectionRenderer {
       reprotect: () => this.reprotect(record),
       remove: () => this.remove(record),
       update: () => this.scheduleRecordUpdate(record),
-      setBlockedSubject: (blocked) => this.setRecordBlockedSubject(record, blocked),
       setDescriptionVisible: (visible) => this.setRecordDescriptionVisible(record, visible),
       isRevealed: () => record.revealed,
     };
@@ -104,7 +93,6 @@ export class ProtectionRenderer {
     record = {
       candidate,
       description: options.description,
-      blockedSubject: options.blockedSubject ?? false,
       host,
       layer,
       onReveal: options.onReveal,
@@ -112,13 +100,11 @@ export class ProtectionRenderer {
       onReprotect: options.onReprotect,
       descriptionVisible: options.descriptionsVisible,
       pageDescriptionsVisible: options.descriptionsVisible,
-      mode: options.mode,
       revealed: false,
       removed: false,
-      stopStrictWatch: null,
       handle,
-      onMouseEnter: () => layer.classList.add("eg-target-hover"),
-      onMouseLeave: () => layer.classList.remove("eg-target-hover"),
+      onMouseEnter: () => layer.classList.add("buof-target-hover"),
+      onMouseLeave: () => layer.classList.remove("buof-target-hover"),
     };
 
     candidate.element.addEventListener("mouseenter", record.onMouseEnter);
@@ -150,7 +136,7 @@ export class ProtectionRenderer {
 
   private createIsolatedHost(): { host: HTMLElement; shadow: ShadowRoot } {
     const host = this.document.createElement("div");
-    host.setAttribute("data-eclipse-goggles-root", "");
+    host.setAttribute("data-buof-root", "");
     host.setAttribute("popover", "manual");
     Object.assign(host.style, {
       position: "absolute",
@@ -184,32 +170,25 @@ export class ProtectionRenderer {
   private reveal(record: ProtectionRecord): void {
     if (record.removed || record.revealed) return;
     const keepFocus = (record.layer.getRootNode() as ShadowRoot).activeElement ===
-      record.layer.querySelector(".eg-reveal-surface");
+      record.layer.querySelector(".buof-reveal-surface");
     record.revealed = true;
-    record.layer.className = "eg-layer eg-revealed";
-    const reprotect = this.createIconButton("eg-reprotect", "Frost again", "undo");
+    record.layer.className = "buof-layer buof-revealed";
+    const reprotect = this.createIconButton("buof-reprotect", "Frost again", "undo");
     reprotect.addEventListener("click", (event) => this.activate(record, event, "reprotect"));
     record.layer.replaceChildren(reprotect);
     if (keepFocus) reprotect.focus();
-    record.candidate.element.removeAttribute("data-eclipse-goggles-protected");
+    record.candidate.element.removeAttribute("data-buof-protected");
     record.onReveal();
     this.updateRecord(record);
-    if (record.mode === "strict") {
-      record.stopStrictWatch = this.createStrictGuard().watch(record.candidate.element, () => {
-        record.handle.reprotect();
-      });
-    }
   }
 
   private reprotect(record: ProtectionRecord): void {
     if (record.removed || !record.revealed) return;
     const keepFocus = (record.layer.getRootNode() as ShadowRoot).activeElement ===
-      record.layer.querySelector(".eg-reprotect");
+      record.layer.querySelector(".buof-reprotect");
     record.revealed = false;
-    record.stopStrictWatch?.();
-    record.stopStrictWatch = null;
     this.renderProtected(record);
-    if (keepFocus) record.layer.querySelector<HTMLButtonElement>(".eg-reveal-surface")?.focus();
+    if (keepFocus) record.layer.querySelector<HTMLButtonElement>(".buof-reveal-surface")?.focus();
     this.updateRecord(record);
     markProtected(record.candidate);
     record.onReprotect();
@@ -217,19 +196,19 @@ export class ProtectionRenderer {
 
   private renderProtected(record: ProtectionRecord, box?: DOMRect): void {
     const { layer, description } = record;
-    layer.className = "eg-layer eg-frost";
+    layer.className = "buof-layer buof-frost";
     layer.removeAttribute("aria-label");
     const presentation = presentationFor(box ?? record.candidate.element.getBoundingClientRect());
     const compact = presentation.compact;
-    layer.classList.toggle("eg-compact", compact);
+    layer.classList.toggle("buof-compact", compact);
 
     const revealSurface = this.createButton(
       "",
-      "eg-reveal-surface",
+      "buof-reveal-surface",
       `${optionsLabel(record)}: ${description}`,
     );
     const showCue = this.document.createElement("span");
-    showCue.className = "eg-show-cue";
+    showCue.className = "buof-show-cue";
     showCue.setAttribute("aria-hidden", "true");
     showCue.textContent = "Show";
     revealSurface.append(showCue);
@@ -239,25 +218,25 @@ export class ProtectionRenderer {
 
     const children: HTMLElement[] = [revealSurface];
     const infoControl = this.document.createElement("div");
-    infoControl.className = "eg-info-control";
+    infoControl.className = "buof-info-control";
     infoControl.hidden = !presentation.showInfo;
-    const info = this.createButton("i", "eg-info-button", "Show description");
+    const info = this.createButton("i", "buof-info-button", "Show description");
     info.setAttribute("aria-expanded", "false");
-    info.setAttribute("aria-controls", "eg-info-panel");
+    info.setAttribute("aria-controls", "buof-info-panel");
     const characters = Array.from(description);
     const preview = characters.length > 50 ? `${characters.slice(0, 50).join("")}…` : description;
     const previewCopy = this.document.createElement("div");
-    previewCopy.className = "eg-info-preview";
+    previewCopy.className = "buof-info-preview";
     previewCopy.textContent = preview;
     const panel = this.document.createElement("div");
-    panel.id = "eg-info-panel";
-    panel.className = "eg-info-panel";
+    panel.id = "buof-info-panel";
+    panel.className = "buof-info-panel";
     const fullCopy = this.document.createElement("div");
-    fullCopy.className = "eg-info-description";
+    fullCopy.className = "buof-info-description";
     fullCopy.textContent = description;
     const always = this.createButton(
       "Show descriptions by default on this site",
-      "eg-info-always",
+      "buof-info-always",
       "Show descriptions by default on this site",
     );
     info.addEventListener("click", (event) => {
@@ -312,10 +291,10 @@ export class ProtectionRenderer {
   }
 
   private updateDescriptionState(record: ProtectionRecord): void {
-    const control = record.layer.querySelector<HTMLElement>(".eg-info-control");
-    const info = record.layer.querySelector<HTMLButtonElement>(".eg-info-button");
-    const always = record.layer.querySelector<HTMLButtonElement>(".eg-info-always");
-    control?.classList.toggle("eg-info-pinned", record.descriptionVisible);
+    const control = record.layer.querySelector<HTMLElement>(".buof-info-control");
+    const info = record.layer.querySelector<HTMLButtonElement>(".buof-info-button");
+    const always = record.layer.querySelector<HTMLButtonElement>(".buof-info-always");
+    control?.classList.toggle("buof-info-pinned", record.descriptionVisible);
     info?.setAttribute("aria-expanded", String(record.descriptionVisible));
     info?.setAttribute("aria-label", record.descriptionVisible ? "Hide description" : "Show description");
     if (always) {
@@ -332,15 +311,6 @@ export class ProtectionRenderer {
     this.updateDescriptionState(record);
   }
 
-  private setRecordBlockedSubject(record: ProtectionRecord, blocked: boolean): void {
-    if (record.blockedSubject === blocked) return;
-    record.blockedSubject = blocked;
-    record.layer.querySelector(".eg-reveal-surface")?.setAttribute(
-      "aria-label",
-      `${optionsLabel(record)}: ${record.description}`,
-    );
-  }
-
   private isCompact(record: ProtectionRecord, currentBox?: DOMRect): boolean {
     const box = currentBox ?? record.candidate.element.getBoundingClientRect();
     return presentationFor(box).compact;
@@ -351,10 +321,10 @@ export class ProtectionRenderer {
     const box = currentBox ?? record.candidate.element.getBoundingClientRect();
     const presentation = presentationFor(box);
     const { compact, controlSize, inset, blur, showInfo } = presentation;
-    record.layer.style.setProperty("--eg-control-size", `${controlSize}px`);
-    record.layer.style.setProperty("--eg-control-inset", `${inset}px`);
-    record.layer.style.setProperty("--eg-frost-blur", `${blur}px`);
-    const infoControl = record.layer.querySelector<HTMLElement>(".eg-info-control");
+    record.layer.style.setProperty("--buof-control-size", `${controlSize}px`);
+    record.layer.style.setProperty("--buof-control-inset", `${inset}px`);
+    record.layer.style.setProperty("--buof-frost-blur", `${blur}px`);
+    const infoControl = record.layer.querySelector<HTMLElement>(".buof-info-control");
     if (infoControl) infoControl.hidden = !showInfo;
     if (record.revealed) {
       const width = Math.min(controlSize, box.width);
@@ -393,11 +363,11 @@ export class ProtectionRenderer {
       width: `${box.width}px`,
       height: `${Math.max(0, box.height - topInset)}px`,
     });
-    record.layer.style.setProperty("--eg-control-right", `${Math.max(inset, box.right - this.window.innerWidth + inset)}px`);
-    record.layer.style.setProperty("--eg-control-top", `${Math.max(inset, inset - clippedTop)}px`);
-    record.layer.style.setProperty("--eg-caption-left", `${Math.max(inset, inset - box.left)}px`);
-    record.layer.style.setProperty("--eg-caption-bottom", `${inset}px`);
-    record.layer.classList.toggle("eg-compact", compact);
+    record.layer.style.setProperty("--buof-control-right", `${Math.max(inset, box.right - this.window.innerWidth + inset)}px`);
+    record.layer.style.setProperty("--buof-control-top", `${Math.max(inset, inset - clippedTop)}px`);
+    record.layer.style.setProperty("--buof-caption-left", `${Math.max(inset, inset - box.left)}px`);
+    record.layer.style.setProperty("--buof-caption-bottom", `${inset}px`);
+    record.layer.classList.toggle("buof-compact", compact);
     const coveredByIframe = isCoveredByIframe(
       this.document,
       record.candidate.element,
@@ -440,11 +410,9 @@ export class ProtectionRenderer {
   private remove(record: ProtectionRecord): void {
     if (record.removed) return;
     record.removed = true;
-    record.stopStrictWatch?.();
-    record.stopStrictWatch = null;
     this.dirtyRecords.delete(record);
     record.host.remove();
-    record.candidate.element.removeAttribute("data-eclipse-goggles-protected");
+    record.candidate.element.removeAttribute("data-buof-protected");
     record.candidate.element.removeEventListener("mouseenter", record.onMouseEnter);
     record.candidate.element.removeEventListener("mouseleave", record.onMouseLeave);
     if (this.records.get(record.candidate.element) === record) this.records.delete(record.candidate.element);
@@ -492,7 +460,7 @@ function topEdgeOcclusionInset(
   let current = underlying instanceof HTMLElement ? underlying : underlying?.parentElement ?? null;
   while (current && current !== document.documentElement) {
     if (
-      !isGogglesElement(current) &&
+      !isExtensionElement(current) &&
       current !== target &&
       !current.contains(target) &&
       !target.contains(current)
@@ -536,24 +504,24 @@ function composedParent(element: HTMLElement): HTMLElement | null {
   return root instanceof ShadowRoot && root.host instanceof HTMLElement ? root.host : null;
 }
 
-function isGogglesElement(element: HTMLElement): boolean {
-  if (element.closest("[data-eclipse-goggles-root]")) return true;
+function isExtensionElement(element: HTMLElement): boolean {
+  if (element.closest("[data-buof-root]")) return true;
   const root = element.getRootNode();
   return root instanceof ShadowRoot &&
     root.host instanceof HTMLElement &&
-    root.host.hasAttribute("data-eclipse-goggles-root");
+    root.host.hasAttribute("data-buof-root");
 }
 
 function mediaLabel(kind: MediaKind): "image" | "video" {
   return kind === "native-video" || kind === "video-iframe" ? "video" : "image";
 }
 
-function optionsLabel(record: ProtectionRecord): string {
-  return record.blockedSubject ? "Reveal blocked subject" : "Reveal protected media";
+function optionsLabel(_record: ProtectionRecord): string {
+  return "Reveal blocked subject";
 }
 
 function layerCompact(layer: HTMLElement): boolean {
-  return layer.classList.contains("eg-compact");
+  return layer.classList.contains("buof-compact");
 }
 
 function presentationFor(box: Pick<DOMRect, "width" | "height">): {
@@ -576,7 +544,7 @@ function presentationFor(box: Pick<DOMRect, "width" | "height">): {
 
 function markProtected(candidate: MediaCandidate): void {
   candidate.element.setAttribute(
-    "data-eclipse-goggles-protected",
+    "data-buof-protected",
     mediaLabel(candidate.kind),
   );
 }

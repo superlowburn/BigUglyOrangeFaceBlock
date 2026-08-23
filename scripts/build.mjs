@@ -33,6 +33,5 @@ await Promise.all([
   cp("src/popup/popup.css", "dist/popup/popup.css"),
   cp("src/options/options.html", "dist/options/options.html"),
   cp("src/options/options.css", "dist/options/options.css"),
-  cp("src/options/demo-media.svg", "dist/options/demo-media.svg"),
   cp("public/icons", "dist/icons", { recursive: true }),
 ]);

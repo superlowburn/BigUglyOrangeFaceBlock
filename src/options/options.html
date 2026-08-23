@@ -3,42 +3,27 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Goggles Settings</title>
+    <title>Big Ugly Orange Face Settings</title>
     <link rel="stylesheet" href="options.css">
   </head>
   <body>
     <main id="app">
       <header class="hero">
         <div class="brand">
-          <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true">
-            <rect x="2" y="2" width="60" height="60" rx="16" fill="#f2f0e8"/>
-            <path fill="#173a2c" d="M16 29v-5C16 13 23 7 32 7s16 6 16 17v5c4 1 6 4 6 8s-2 7-6 8v4c0 6-7 10-16 10S16 55 16 49v-4c-4-1-6-4-6-8s2-7 6-8Z"/>
-            <g fill="#f2f0e8" stroke="#805b1f" stroke-width="3.5">
-              <circle cx="23" cy="33" r="9"/><circle cx="41" cy="33" r="9"/>
-              <path d="M32 32h0" stroke-linecap="round" stroke-width="5"/>
-            </g>
-            <g stroke="#f2f0e8" stroke-width="2.5" stroke-linecap="round">
-              <path d="M26 47v4M30 47v4M34 47v4M38 47v4"/>
-            </g>
-          </svg>
-          <span class="brand-copy"><strong>Goggles</strong></span>
+          <img class="brand-mark" src="../icons/icon.svg" alt="">
+          <span class="brand-copy"><strong>Big Ugly Orange Face</strong></span>
         </div>
         <div class="hero-copy">
           <h1>Settings</h1>
-          <p>The Goggles, they do something.</p>
-        </div>
-        <div id="demo-media" class="demo-media">
-          <img src="demo-media.svg" alt="A calm lake beneath wooded hills">
-          <div class="demo-frost" aria-hidden="true"></div>
-          <button id="demo-reveal" type="button">Click to reveal</button>
+          <p>Choose the subjects you do not want forced into view.</p>
         </div>
       </header>
 
       <section id="blocked-subjects" aria-labelledby="blocked-subjects-heading">
         <p class="section-number">01</p>
         <div>
-          <h2 id="blocked-subjects-heading">Blocked subjects</h2>
-          <p class="section-intro">Keep likely matches frosted—even on sites where media is normally shown.</p>
+          <h2 id="blocked-subjects-heading">Subjects to frost</h2>
+          <p class="section-intro">Likely matches stay frosted on every site until you reveal them.</p>
           <div class="subject-card">
             <label class="subject-toggle" for="blocked-subjects-enabled">
               <span>
@@ -47,7 +32,7 @@
               </span>
               <input id="blocked-subjects-enabled" type="checkbox">
             </label>
-            <p class="subject-explainer">Goggles checks image descriptions, filenames, captions, and nearby titles. It may miss images or frost unrelated ones. Images stay on this device.</p>
+            <p class="subject-explainer">Big Ugly Orange Face checks descriptions, filenames, captions, links, and nearby titles. It can miss images or frost unrelated ones. Everything stays on this device.</p>
             <details class="keyword-editor">
               <summary>Matching words</summary>
               <label for="blocked-subject-keywords">
@@ -60,19 +45,10 @@
         </div>
       </section>
 
-      <section aria-labelledby="rules-heading">
-        <p class="section-number">02</p>
-        <div>
-          <h2 id="rules-heading">Sites showing images and videos</h2>
-          <p class="section-intro">These sites show images and videos. Blocked subjects stay frosted.</p>
-          <div id="site-rules" class="site-rules"></div>
-        </div>
-      </section>
-
       <footer>
         <strong>Private by design.</strong>
-        <span>Best effort: Goggles may miss or misidentify images.</span>
-        <span>Goggles works locally. It does not upload your images.</span>
+        <span>Best effort: Big Ugly Orange Face may miss or misidentify images.</span>
+        <span>It works locally and does not upload your images.</span>
       </footer>
     </main>
     <script src="options.js"></script>

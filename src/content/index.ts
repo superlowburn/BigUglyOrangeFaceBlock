@@ -1,14 +1,13 @@
-import { isSiteMode, SitePolicyStore } from "../shared/site-policy";
-import type { ExtensionMessage, PolicyContext, SiteMode } from "../shared/media-types";
 import { ContentController } from "./content-controller";
 import {
   BlockedSubjectsStore,
   type BlockedSubjectsConfig,
 } from "../shared/blocked-subjects";
+import { DescriptionPreferencesStore } from "../shared/description-preferences";
+import type { ProtectionContext } from "../shared/media-types";
 
 interface ContentControllerPort {
-  start(context: PolicyContext): void;
-  applyMode(mode: SiteMode): void;
+  start(context: ProtectionContext): void;
   applyBlockedSubjects(config: BlockedSubjectsConfig): void;
   stop(options?: { restoreMedia?: boolean }): void;
 }
@@ -23,10 +22,8 @@ export interface ContentBootstrapDependencies {
   isChildFrame: boolean;
   parentLocation: () => ParentLocation | null;
   createController: () => ContentControllerPort;
-  sendMessage: (message: ExtensionMessage) => Promise<unknown>;
   getDescriptionsVisible: (origin: string) => Promise<boolean>;
   getBlockedSubjects: () => Promise<BlockedSubjectsConfig>;
-  watchPolicy: (origin: string, listener: (mode: SiteMode) => void) => () => void;
   watchBlockedSubjects: (listener: (config: BlockedSubjectsConfig) => void) => () => void;
   addPageHideListener: (listener: () => void) => void;
 }
@@ -40,70 +37,38 @@ export async function bootstrapContentScript(
 
   const controller = dependencies.createController();
   let stopWatching: (() => void) | null = null;
-  let stopWatchingBlockedSubjects: (() => void) | null = null;
+  let currentBlockedSubjects: BlockedSubjectsConfig | null = null;
+  let started = false;
   let disposed = false;
 
   dependencies.addPageHideListener(() => {
     disposed = true;
     stopWatching?.();
-    stopWatchingBlockedSubjects?.();
     controller.stop({ restoreMedia: false });
   });
 
-  try {
-    const response = await dependencies.sendMessage({ type: "policy:get-current" });
-    if (!isPolicyContext(response)) throw new TypeError("Invalid policy response");
-    if (disposed) return;
+  stopWatching = dependencies.watchBlockedSubjects((config) => {
+    currentBlockedSubjects = config;
+    if (started) controller.applyBlockedSubjects(config);
+  });
 
-    let currentMode = response.mode;
-    let policyUpdates = 0;
-    let started = false;
-    stopWatching = dependencies.watchPolicy(response.origin, (mode) => {
-      policyUpdates += 1;
-      currentMode = mode;
-      if (started) controller.applyMode(mode);
-    });
-    let currentBlockedSubjects: BlockedSubjectsConfig | null = null;
-    stopWatchingBlockedSubjects = dependencies.watchBlockedSubjects((config) => {
-      currentBlockedSubjects = config;
-      if (started) controller.applyBlockedSubjects(config);
-    });
+  const origin = fallbackOrigin(page, dependencies);
+  const [descriptionsVisible, storedSubjects] = await Promise.all([
+    dependencies.getDescriptionsVisible(origin).catch(() => false),
+    dependencies.getBlockedSubjects().catch(() => ({ enabled: false, keywords: [] })),
+  ]);
+  if (disposed) return;
 
-    const updatesBeforeConfirmation = policyUpdates;
-    const confirmedPolicy = await dependencies.sendMessage({ type: "policy:get-current" })
-      .catch(() => null);
-    if (
-      policyUpdates === updatesBeforeConfirmation &&
-      isPolicyContext(confirmedPolicy) &&
-      confirmedPolicy.origin === response.origin
-    ) {
-      currentMode = confirmedPolicy.mode;
-    }
-
-    const descriptionsVisible = await dependencies.getDescriptionsVisible(response.origin)
-      .catch(() => false);
-    const blockedSubjects = await dependencies.getBlockedSubjects()
-      .catch(() => ({ enabled: false, keywords: [] }));
-    currentBlockedSubjects ??= blockedSubjects;
-    if (disposed) return;
-    controller.start({
-      ...response,
-      mode: currentMode,
-      descriptionsVisible,
-      ...(currentBlockedSubjects.enabled ? { blockedSubjects: currentBlockedSubjects } : {}),
-    });
-    started = true;
-  } catch {
-    if (disposed) return;
-    controller.start({
-      origin: fallbackOrigin(page, dependencies),
-      mode: "protected",
-    });
-  }
+  controller.start({
+    origin,
+    descriptionsVisible,
+    blockedSubjects: currentBlockedSubjects ?? storedSubjects,
+  });
+  started = true;
 }
 
 function productionDependencies(): ContentBootstrapDependencies {
-  const store = new SitePolicyStore(chrome.storage.local, chrome.storage.onChanged);
+  const descriptions = new DescriptionPreferencesStore(chrome.storage.local);
   const blockedSubjects = new BlockedSubjectsStore(chrome.storage.local, chrome.storage.onChanged);
   return {
     href: window.location.href,
@@ -119,15 +84,10 @@ function productionDependencies(): ContentBootstrapDependencies {
       }
     },
     createController: () => new ContentController({
-      enableSiteControl: window === window.top,
-      setSiteMode: (origin, mode) => store.set(origin, mode),
-      setDescriptionsVisible: (origin, visible) => store.setDescriptionsVisible(origin, visible),
-      openSettings: () => chrome.runtime.sendMessage({ type: "options:open" }),
+      setDescriptionsVisible: (origin, visible) => descriptions.set(origin, visible),
     }),
-    sendMessage: (message) => chrome.runtime.sendMessage(message),
-    getDescriptionsVisible: (origin) => store.getDescriptionsVisible(origin),
+    getDescriptionsVisible: (origin) => descriptions.get(origin),
     getBlockedSubjects: () => blockedSubjects.get(),
-    watchPolicy: (origin, listener) => store.watch(origin, listener),
     watchBlockedSubjects: (listener) => blockedSubjects.watch(listener),
     addPageHideListener: (listener) => {
       window.addEventListener("pagehide", listener, { once: true });
@@ -145,10 +105,7 @@ function parseUrl(href: string): URL | null {
 
 function isEligibleDocument(
   page: URL,
-  dependencies: Pick<
-    ContentBootstrapDependencies,
-    "isChildFrame" | "parentLocation"
-  >,
+  dependencies: Pick<ContentBootstrapDependencies, "isChildFrame" | "parentLocation">,
 ): boolean {
   if (page.protocol === "http:" || page.protocol === "https:") return true;
   if (page.href !== "about:blank" || !dependencies.isChildFrame) return false;
@@ -168,19 +125,6 @@ function isSupportedProviderDocument(page: URL): boolean {
   return page.hostname === "player.vimeo.com" && /^\/video\/[^/]+$/.test(page.pathname);
 }
 
-function isPolicyContext(value: unknown): value is PolicyContext {
-  if (!value || typeof value !== "object") return false;
-  if (!("origin" in value) || !("mode" in value)) return false;
-  if (typeof value.origin !== "string" || !isSiteMode(value.mode)) return false;
-
-  const origin = parseUrl(value.origin);
-  return (
-    origin !== null &&
-    (origin.protocol === "http:" || origin.protocol === "https:") &&
-    origin.origin === value.origin
-  );
-}
-
 function fallbackOrigin(
   page: URL,
   dependencies: Pick<ContentBootstrapDependencies, "parentLocation">,
@@ -189,9 +133,6 @@ function fallbackOrigin(
   return dependencies.parentLocation()?.origin ?? "null";
 }
 
-if (
-  typeof chrome !== "undefined" &&
-  typeof chrome.runtime?.sendMessage === "function"
-) {
+if (typeof chrome !== "undefined" && typeof chrome.runtime?.sendMessage === "function") {
   void bootstrapContentScript();
 }

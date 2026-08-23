@@ -12,6 +12,6 @@ export default defineConfig({
   webServer: {
     command: "node tests/e2e/server.mjs",
     url: "http://127.0.0.1:4173/",
-    reuseExistingServer: false,
+    reuseExistingServer: true,
   },
 });

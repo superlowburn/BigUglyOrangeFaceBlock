@@ -1,20 +1,11 @@
-import type { ExtensionMessage, PolicyContext } from "../shared/media-types";
-import { isSiteMode, SitePolicyStore } from "../shared/site-policy";
-import { BlockedSubjectsStore } from "../shared/blocked-subjects";
+import type { ExtensionMessage } from "../shared/media-types";
 import { ProviderRequestGate } from "./provider-request-gate";
-
-type StorageArea = {
-  get(key: string | string[]): Promise<Record<string, unknown>>;
-  set(items: Record<string, unknown>): Promise<void>;
-};
 
 type Tab = { id?: number | undefined; url?: string | undefined };
 
 type MessageSender = { tab?: Tab };
 
 type WorkerDependencies = {
-  storage: StorageArea;
-  tabs: { get(tabId: number): Promise<Tab> };
   openOptionsPage?: () => Promise<void>;
   providerGate?: Pick<ProviderRequestGate, "authorize" | "revoke">;
 };
@@ -44,29 +35,16 @@ interface FirstRunRuntime {
   openOptionsPage(): Promise<void>;
 }
 
-type WorkerResponse = PolicyContext | { grantId: number; source: string } | { opened: true } | {
-  error: "unsupported-page" | "invalid-message" | "origin-changed";
+type WorkerResponse = { grantId: number; source: string } | { opened: true } | { revoked: true } | {
+  error: "unsupported-page" | "invalid-message";
 };
 
 function isExtensionMessage(message: unknown): message is ExtensionMessage {
   if (!message || typeof message !== "object" || !("type" in message)) return false;
 
   switch (message.type) {
-    case "policy:get-current":
-      return true;
     case "options:open":
       return true;
-    case "policy:get-tab":
-      return "tabId" in message && typeof message.tabId === "number";
-    case "policy:set-tab":
-      return (
-        "tabId" in message &&
-        typeof message.tabId === "number" &&
-        "mode" in message &&
-        isSiteMode(message.mode) &&
-        "expectedOrigin" in message &&
-        typeof message.expectedOrigin === "string"
-      );
     case "provider:authorize":
       return "source" in message && typeof message.source === "string" &&
         "disableAutoplay" in message && typeof message.disableAutoplay === "boolean";
@@ -88,21 +66,6 @@ function originFor(tab?: Tab): string | undefined {
   }
 }
 
-async function contextFor(
-  tab: Tab | undefined,
-  store: SitePolicyStore,
-  blockedSubjectsStore: BlockedSubjectsStore,
-): Promise<WorkerResponse> {
-  const origin = originFor(tab);
-  if (!origin) return { error: "unsupported-page" };
-
-  return {
-    origin,
-    mode: await store.get(origin),
-    blockedSubjects: await blockedSubjectsStore.get(),
-  };
-}
-
 export async function handleExtensionMessage(
   message: unknown,
   sender: MessageSender,
@@ -110,25 +73,10 @@ export async function handleExtensionMessage(
 ): Promise<WorkerResponse> {
   if (!isExtensionMessage(message)) return { error: "invalid-message" };
 
-  const store = new SitePolicyStore(deps.storage);
-  const blockedSubjectsStore = new BlockedSubjectsStore(deps.storage);
-
   switch (message.type) {
     case "options:open":
       await (deps.openOptionsPage ?? (() => chrome.runtime.openOptionsPage()))();
       return { opened: true };
-    case "policy:get-current":
-      return contextFor(sender.tab, store, blockedSubjectsStore);
-    case "policy:get-tab":
-      return contextFor(await deps.tabs.get(message.tabId), store, blockedSubjectsStore);
-    case "policy:set-tab": {
-      const origin = originFor(await deps.tabs.get(message.tabId));
-      if (!origin) return { error: "unsupported-page" };
-      if (origin !== message.expectedOrigin) return { error: "origin-changed" };
-
-      await store.set(origin, message.mode);
-      return { origin, mode: message.mode === "strict" ? "protected" : message.mode };
-    }
     case "provider:authorize": {
       const tabId = sender.tab?.id;
       if (typeof tabId !== "number" || !originFor(sender.tab)) {
@@ -147,7 +95,7 @@ export async function handleExtensionMessage(
         return { error: "unsupported-page" };
       }
       await providerGate(deps).revoke(tabId, message.grantId);
-      return { origin: originFor(sender.tab)!, mode: "protected" };
+      return { revoked: true };
     }
   }
 }
@@ -189,8 +137,6 @@ function providerGate(
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   void handleExtensionMessage(message, sender, {
-    storage: chrome.storage.local,
-    tabs: chrome.tabs,
     openOptionsPage: () => chrome.runtime.openOptionsPage(),
   }).then(sendResponse);
   return true;

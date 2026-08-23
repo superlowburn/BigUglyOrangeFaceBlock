@@ -4,6 +4,11 @@ import { describe, expect, it } from "vitest";
 describe("extension manifest", () => {
   const manifest = JSON.parse(readFileSync("public/manifest.json", "utf8"));
 
+  it("uses the Big Ugly Orange Face identity", () => {
+    expect(manifest.name).toBe("Big Ugly Orange Face");
+    expect(manifest.description).toBe("Frost likely matches for subjects you choose.");
+  });
+
   it("loads the content script at document_start in every frame", () => {
     expect(manifest.manifest_version).toBe(3);
     expect(manifest.content_scripts).toEqual([
@@ -29,7 +34,6 @@ describe("extension manifest", () => {
 
   it("requests only the agreed permissions", () => {
     expect(manifest.permissions.sort()).toEqual([
-      "activeTab",
       "declarativeNetRequestWithHostAccess",
       "storage",
       "webNavigation",

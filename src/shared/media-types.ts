@@ -1,5 +1,3 @@
-export type SiteMode = "trusted" | "protected" | "strict";
-
 export type MediaKind =
   | "image"
   | "background-image"
@@ -11,17 +9,13 @@ export interface MediaCandidate {
   kind: MediaKind;
 }
 
-export interface PolicyContext {
+export interface ProtectionContext {
   origin: string;
-  mode: SiteMode;
   descriptionsVisible?: boolean;
   blockedSubjects?: import("./blocked-subjects").BlockedSubjectsConfig;
 }
 
 export type ExtensionMessage =
-  | { type: "policy:get-current" }
-  | { type: "policy:get-tab"; tabId: number }
-  | { type: "policy:set-tab"; tabId: number; mode: SiteMode; expectedOrigin: string }
   | { type: "options:open" }
   | { type: "provider:authorize"; source: string; disableAutoplay: boolean }
   | { type: "provider:revoke"; grantId: number };

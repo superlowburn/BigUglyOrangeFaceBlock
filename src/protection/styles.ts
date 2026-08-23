@@ -9,7 +9,7 @@ export const protectionStyles = `
   box-sizing: border-box;
 }
 
-.eg-layer {
+.buof-layer {
   border: 0;
   padding: 0;
   color: inherit;
@@ -23,12 +23,12 @@ export const protectionStyles = `
   font: 14px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-.eg-frost {
-  backdrop-filter: blur(var(--eg-frost-blur, 25px));
+.buof-frost {
+  backdrop-filter: blur(var(--buof-frost-blur, 25px));
   background: rgba(211, 211, 211, 0.10);
 }
 
-.eg-reveal-surface {
+.buof-reveal-surface {
   position: absolute;
   inset: 0;
   z-index: 1;
@@ -40,7 +40,7 @@ export const protectionStyles = `
   cursor: pointer;
 }
 
-.eg-show-cue {
+.buof-show-cue {
   position: absolute;
   left: 50%;
   bottom: 12px;
@@ -56,36 +56,36 @@ export const protectionStyles = `
   font: 600 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-.eg-reveal-surface:hover .eg-show-cue,
-.eg-reveal-surface:focus-visible .eg-show-cue {
+.buof-reveal-surface:hover .buof-show-cue,
+.buof-reveal-surface:focus-visible .buof-show-cue {
   opacity: 1;
 }
 
-.eg-compact .eg-show-cue {
+.buof-compact .buof-show-cue {
   bottom: 6px;
   padding: 4px 7px;
   font-size: 11px;
 }
 
-.eg-info-control {
+.buof-info-control {
   position: absolute;
-  left: var(--eg-caption-left, 12px);
-  bottom: var(--eg-caption-bottom, 12px);
+  left: var(--buof-caption-left, 12px);
+  bottom: var(--buof-caption-bottom, 12px);
   z-index: 3;
-  width: calc(100% - var(--eg-caption-left, 12px) - var(--eg-control-right, 12px));
-  min-height: var(--eg-info-size, 28px);
+  width: calc(100% - var(--buof-caption-left, 12px) - var(--buof-control-right, 12px));
+  min-height: var(--buof-info-size, 28px);
   pointer-events: none;
 }
 
-.eg-info-control[hidden] {
+.buof-info-control[hidden] {
   display: none;
 }
 
-.eg-info-button {
+.buof-info-button {
   appearance: none;
   display: grid;
-  width: var(--eg-info-size, 28px);
-  height: var(--eg-info-size, 28px);
+  width: var(--buof-info-size, 28px);
+  height: var(--buof-info-size, 28px);
   padding: 0;
   place-items: center;
   color: #fff;
@@ -99,14 +99,14 @@ export const protectionStyles = `
   cursor: pointer;
 }
 
-.eg-info-button:hover {
+.buof-info-button:hover {
   background: rgba(31, 33, 35, 0.92);
 }
 
-.eg-info-preview,
-.eg-info-panel {
+.buof-info-preview,
+.buof-info-panel {
   position: absolute;
-  bottom: calc(var(--eg-info-size, 28px) + 6px);
+  bottom: calc(var(--buof-info-size, 28px) + 6px);
   left: 0;
   display: none;
   width: min(320px, 100%);
@@ -119,26 +119,26 @@ export const protectionStyles = `
   pointer-events: auto;
 }
 
-.eg-info-preview {
+.buof-info-preview {
   padding: 7px 9px;
   font-size: 12px;
   line-height: 1.35;
 }
 
-.eg-info-control:hover:not(.eg-info-pinned) .eg-info-preview,
-.eg-info-button:focus-visible + .eg-info-preview {
+.buof-info-control:hover:not(.buof-info-pinned) .buof-info-preview,
+.buof-info-button:focus-visible + .buof-info-preview {
   display: block;
 }
 
-.eg-info-control.eg-info-pinned .eg-info-preview {
+.buof-info-control.buof-info-pinned .buof-info-preview {
   display: none;
 }
 
-.eg-info-pinned .eg-info-panel {
+.buof-info-pinned .buof-info-panel {
   display: grid;
 }
 
-.eg-info-description {
+.buof-info-description {
   max-height: 120px;
   padding: 9px 10px;
   overflow: auto;
@@ -146,7 +146,7 @@ export const protectionStyles = `
   line-height: 1.4;
 }
 
-.eg-info-always {
+.buof-info-always {
   min-height: 36px;
   padding: 8px 10px;
   color: #e4e7e9;
@@ -159,16 +159,16 @@ export const protectionStyles = `
   font: 600 12px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-.eg-info-always:hover {
+.buof-info-always:hover {
   color: #fff;
   background: rgba(255, 255, 255, 0.10);
 }
 
-.eg-reprotect {
+.buof-reprotect {
   appearance: none;
   display: grid;
-  width: var(--eg-control-size, 44px);
-  height: var(--eg-control-size, 44px);
+  width: var(--buof-control-size, 44px);
+  height: var(--buof-control-size, 44px);
   padding: 10px;
   place-items: center;
   color: #fff;
@@ -180,15 +180,15 @@ export const protectionStyles = `
   font: inherit;
 }
 
-.eg-reprotect {
+.buof-reprotect {
   border-radius: 50%;
 }
 
-.eg-reprotect:hover {
+.buof-reprotect:hover {
   background: rgba(31, 33, 35, 0.90);
 }
 
-.eg-reprotect svg {
+.buof-reprotect svg {
   display: block;
   overflow: visible;
   fill: none;
@@ -198,49 +198,49 @@ export const protectionStyles = `
   stroke-linejoin: round;
 }
 
-.eg-reprotect svg {
+.buof-reprotect svg {
   width: 28px;
   height: 28px;
 }
 
-.eg-compact .eg-reprotect {
+.buof-compact .buof-reprotect {
   padding: 5px;
 }
 
-.eg-compact .eg-reprotect svg {
+.buof-compact .buof-reprotect svg {
   width: 22px;
   height: 22px;
 }
 
-.eg-compact .eg-info-control {
-  --eg-info-size: 24px;
+.buof-compact .buof-info-control {
+  --buof-info-size: 24px;
 }
 
-.eg-compact .eg-info-button {
+.buof-compact .buof-info-button {
   font-size: 15px;
 }
 
-.eg-compact .eg-info-preview,
-.eg-compact .eg-info-description {
+.buof-compact .buof-info-preview,
+.buof-compact .buof-info-description {
   font-size: 11px;
 }
 
-.eg-reveal-surface:focus-visible,
-.eg-info-button:focus-visible,
-.eg-info-always:focus-visible,
-.eg-reprotect:focus-visible {
+.buof-reveal-surface:focus-visible,
+.buof-info-button:focus-visible,
+.buof-info-always:focus-visible,
+.buof-reprotect:focus-visible {
   outline: 2px solid #fff;
   outline-offset: 2px;
   box-shadow: 0 0 0 4px rgba(31, 33, 35, 0.72);
 }
 
-.eg-layer.eg-revealed {
+.buof-layer.buof-revealed {
   overflow: visible;
   pointer-events: none;
   cursor: default;
 }
 
-.eg-reprotect {
+.buof-reprotect {
   width: 100%;
   height: 100%;
   opacity: 0.78;
@@ -248,8 +248,8 @@ export const protectionStyles = `
   transition: opacity 120ms ease, background-color 120ms ease;
 }
 
-.eg-target-hover .eg-reprotect,
-.eg-reprotect:focus-visible {
+.buof-target-hover .buof-reprotect,
+.buof-reprotect:focus-visible {
   opacity: 1;
 }
 

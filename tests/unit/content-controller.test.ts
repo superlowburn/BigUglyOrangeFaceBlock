@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ContentController,
   type ContentControllerDependencies,
@@ -8,76 +8,15 @@ import {
   bootstrapContentScript,
   type ContentBootstrapDependencies,
 } from "../../src/content/index";
-import type { MediaCandidate, MediaKind, SiteMode } from "../../src/shared/media-types";
-import type {
-  ProtectionHandle,
-  ProtectionOptions,
-} from "../../src/protection/renderer";
-import { ProviderFrameController } from "../../src/media/provider-frames";
-import { classifyElement } from "../../src/media/classifier";
+import type { MediaCandidate, MediaKind, ProtectionContext } from "../../src/shared/media-types";
+import type { ProtectionHandle, ProtectionOptions } from "../../src/protection/renderer";
 
-class FakeDocumentObserver implements DocumentObserverPort {
-  readonly start = vi.fn((callback: (elements: readonly Element[]) => void) => {
-    this.callback = callback;
-  });
+class FakeObserver implements DocumentObserverPort {
   readonly scan = vi.fn();
   readonly stop = vi.fn();
   private callback: ((elements: readonly Element[]) => void) | null = null;
-  private readonly attributeChanges = new WeakSet<Element>();
-
-  emit(elements: readonly Element[], attributes: readonly Element[] = []): void {
-    for (const element of attributes) this.attributeChanges.add(element);
-    this.callback?.(elements);
-    for (const element of attributes) this.attributeChanges.delete(element);
-  }
-
-  hadRelevantAttributeChange(element: Element): boolean {
-    return this.attributeChanges.has(element);
-  }
-}
-
-interface RenderedItem {
-  candidate: MediaCandidate;
-  options: ProtectionOptions;
-  handle: ProtectionHandle;
-  isRemoved(): boolean;
-}
-
-function rendererHarness() {
-  const items: RenderedItem[] = [];
-  const protect = vi.fn((candidate: MediaCandidate, options: ProtectionOptions) => {
-    let revealed = false;
-    let removed = false;
-    const handle: ProtectionHandle = {
-      reveal: vi.fn(() => {
-        if (revealed || removed) return;
-        revealed = true;
-        options.onReveal();
-      }),
-      reprotect: vi.fn(() => {
-        if (!revealed || removed) return;
-        revealed = false;
-        options.onReprotect();
-      }),
-      remove: vi.fn(() => {
-        removed = true;
-      }),
-      update: vi.fn(),
-      setDescriptionVisible: vi.fn(),
-      isRevealed: () => revealed,
-      setBlockedSubject: vi.fn((blocked: boolean) => {
-        options.blockedSubject = blocked;
-      }),
-    } as ProtectionHandle;
-    items.push({ candidate, options, handle, isRemoved: () => removed });
-    return handle;
-  });
-  return {
-    protect,
-    items,
-    activeFor: (element: HTMLElement) =>
-      items.filter((item) => item.candidate.element === element && !item.isRemoved()),
-  };
+  start(callback: (elements: readonly Element[]) => void): void { this.callback = callback; }
+  emit(elements: readonly Element[]): void { this.callback?.(elements); }
 }
 
 function candidate(element: HTMLElement, kind: MediaKind): MediaCandidate {
@@ -88,522 +27,174 @@ function controllerHarness(
   classifications = new Map<Element, MediaCandidate>(),
   overrides: Partial<ContentControllerDependencies> = {},
 ) {
-  const observer = new FakeDocumentObserver();
-  const renderer = rendererHarness();
+  const observer = new FakeObserver();
+  const items: Array<{
+    candidate: MediaCandidate;
+    options: ProtectionOptions;
+    handle: ProtectionHandle;
+    removed: () => boolean;
+  }> = [];
+  const renderer = {
+    protect: vi.fn((media: MediaCandidate, options: ProtectionOptions): ProtectionHandle => {
+      let revealed = false;
+      let removed = false;
+      const handle: ProtectionHandle = {
+        reveal: () => { if (!revealed && !removed) { revealed = true; options.onReveal(); } },
+        reprotect: () => { if (revealed && !removed) { revealed = false; options.onReprotect(); } },
+        remove: () => { removed = true; },
+        update: vi.fn(),
+        setDescriptionVisible: vi.fn(),
+        isRevealed: () => revealed,
+      };
+      items.push({ candidate: media, options, handle, removed: () => removed });
+      return handle;
+    }),
+  };
   const nativeVideo = {
-    secure: vi.fn(),
-    release: vi.fn(),
-    reprotect: vi.fn(),
-    restore: vi.fn(),
+    secure: vi.fn(), release: vi.fn(), reprotect: vi.fn(), restore: vi.fn(),
   };
   const providerFrames = {
-    gate: vi.fn(),
-    release: vi.fn(),
-    regate: vi.fn(),
-    restore: vi.fn(),
-    trust: vi.fn(),
-    forget: vi.fn(),
-    dispose: vi.fn(),
+    gate: vi.fn(), release: vi.fn(), regate: vi.fn(), restore: vi.fn(), trust: vi.fn(),
+    forget: vi.fn(), dispose: vi.fn(),
   };
-  const classify = vi.fn((element: Element) => classifications.get(element) ?? null);
-  const resolveDescription = vi.fn((media: MediaCandidate) => `Description for ${media.kind}`);
   const controller = new ContentController({
     document,
     observer,
     renderer,
     nativeVideo,
     providerFrames,
-    classify,
-    resolveDescription,
+    classify: (element) => classifications.get(element) ?? null,
+    resolveDescription: (media) => `Description for ${media.kind}`,
     development: false,
     ...overrides,
   });
   return {
-    controller,
-    observer,
-    renderer,
-    nativeVideo,
-    providerFrames,
-    classify,
-    resolveDescription,
+    controller, observer, renderer, nativeVideo, providerFrames, items,
+    activeFor: (element: HTMLElement) => items.filter(
+      (item) => item.candidate.element === element && !item.removed(),
+    ),
   };
 }
 
 afterEach(() => {
-  document.documentElement.replaceChildren(
-    document.createElement("head"),
-    document.createElement("body"),
-  );
-});
-
-beforeEach(() => {
-  vi.mocked(chrome.storage.local.set).mockClear();
+  document.documentElement.replaceChildren(document.createElement("head"), document.createElement("body"));
 });
 
 describe("ContentController", () => {
-  it("observes Trusted mode only to allow dynamic provider frames without protection", () => {
-    const image = document.createElement("img");
+  it("protects only matching subjects and leaves ordinary media visible", () => {
+    const trump = document.createElement("img");
+    trump.alt = "Donald Trump at a campaign event";
+    const lake = document.createElement("img");
+    lake.alt = "A quiet lake";
+    document.body.append(trump, lake);
+    const harness = controllerHarness(new Map([
+      [trump, candidate(trump, "image")],
+      [lake, candidate(lake, "image")],
+    ]));
+
+    harness.controller.start({
+      origin: "https://news.example",
+      blockedSubjects: { enabled: true, keywords: ["Trump"] },
+    });
+    harness.observer.emit([trump, lake]);
+
+    expect(harness.activeFor(trump)).toHaveLength(1);
+    expect(harness.activeFor(lake)).toHaveLength(0);
+  });
+
+  it("authorizes an unmatched provider frame instead of frosting it", () => {
     const frame = document.createElement("iframe");
-    frame.src = "https://www.youtube.com/embed/trusted-dynamic";
-    document.body.append(image, frame);
-    const harness = controllerHarness(new Map([[image, candidate(image, "image")]]));
+    frame.src = "https://www.youtube.com/embed/weather";
+    frame.title = "Weather report";
+    document.body.append(frame);
+    const harness = controllerHarness(new Map([[frame, candidate(frame, "video-iframe")]]));
 
-    harness.controller.start({ origin: "https://news.example", mode: "trusted" });
-    harness.observer.emit([image, frame]);
+    harness.controller.start({
+      origin: "https://news.example",
+      blockedSubjects: { enabled: true, keywords: ["Trump"] },
+    });
+    harness.observer.emit([frame]);
 
-    expect(harness.observer.start).toHaveBeenCalledTimes(1);
-    expect(harness.observer.scan).toHaveBeenCalledWith(document);
     expect(harness.providerFrames.trust).toHaveBeenCalledWith(frame);
     expect(harness.renderer.protect).not.toHaveBeenCalled();
   });
 
-  it("keeps matching subject images protected on a Trusted site", () => {
-    const trump = document.createElement("img");
-    trump.alt = "Donald Trump at a campaign event";
-    const unrelated = document.createElement("img");
-    unrelated.alt = "A quiet lake";
-    document.body.append(trump, unrelated);
-    const harness = controllerHarness(new Map([
-      [trump, candidate(trump, "image")],
-      [unrelated, candidate(unrelated, "image")],
-    ]));
+  it("gates a matching provider before rendering and permits one reveal", () => {
+    const frame = document.createElement("iframe");
+    frame.src = "https://www.youtube.com/embed/politics";
+    frame.title = "Donald Trump campaign video";
+    document.body.append(frame);
+    const harness = controllerHarness(new Map([[frame, candidate(frame, "video-iframe")]]));
 
     harness.controller.start({
       origin: "https://news.example",
-      mode: "trusted",
-      blockedSubjects: { enabled: true, keywords: ["Trump", "Donald Trump"] },
+      blockedSubjects: { enabled: true, keywords: ["Trump"] },
     });
-    harness.observer.emit([trump, unrelated]);
+    harness.observer.emit([frame]);
 
-    expect(harness.renderer.protect).toHaveBeenCalledTimes(1);
-    expect(harness.renderer.protect).toHaveBeenCalledWith(
-      candidate(trump, "image"),
-      expect.objectContaining({ mode: "trusted", blockedSubject: true }),
+    expect(harness.providerFrames.gate.mock.invocationCallOrder[0]).toBeLessThan(
+      harness.renderer.protect.mock.invocationCallOrder[0]!,
     );
+    harness.items[0]?.handle.reveal();
+    harness.items[0]?.handle.reprotect();
+    expect(harness.providerFrames.release).toHaveBeenCalledWith(frame);
+    expect(harness.providerFrames.regate).toHaveBeenCalledWith(frame);
   });
 
-  it.each([
-    ["poster first", ["poster", "video"] as const],
-    ["video first", ["video", "poster"] as const],
-  ])(
-    "keeps one blocked-subject layer over an overlapping poster/video stack when processed %s",
-    (_label, order) => {
-      const stack = document.createElement("div");
-      const poster = document.createElement("img");
-      poster.alt = "Donald Trump at an event";
-      const video = document.createElement("video");
-      video.setAttribute("aria-label", "News clip");
-      stack.append(poster, video);
-      document.body.append(stack);
-
-      const sharedBox = new DOMRect(20, 30, 320, 180);
-      const boxes = new Map<Element, DOMRect>([
-        [poster, sharedBox],
-        [video, sharedBox],
-      ]);
-      const classify = (element: Element) => classifyElement(element, {
-        box: (target) => boxes.get(target) ?? new DOMRect(),
-        style: (target) => getComputedStyle(target),
-      });
-      const harness = controllerHarness(new Map(), { classify });
-
-      harness.controller.start({
-        origin: "https://news.example",
-        mode: "trusted",
-        blockedSubjects: { enabled: true, keywords: ["Trump"] },
-      });
-      harness.observer.emit(order.map((item) => item === "poster" ? poster : video));
-
-      const active = harness.renderer.items.filter((item) => !item.isRemoved());
-      expect(active).toHaveLength(1);
-      expect(active[0]?.candidate.element).toBe(poster);
-      expect(active[0]?.options.blockedSubject).toBe(true);
-      expect(active[0]?.handle.isRevealed()).toBe(false);
-    },
-  );
-
-  it("keeps matching subjects protected while a site becomes Trusted", () => {
-    const blockedImage = document.createElement("img");
-    blockedImage.alt = "Donald Trump at a campaign event";
-    const ordinaryImage = document.createElement("img");
-    ordinaryImage.alt = "A quiet lake";
-    document.body.append(blockedImage, ordinaryImage);
-    const blockedSubjects = { enabled: true, keywords: ["Trump"] };
-    const harness = controllerHarness(new Map([
-      [blockedImage, candidate(blockedImage, "image")],
-      [ordinaryImage, candidate(ordinaryImage, "image")],
-    ]));
-
-    harness.controller.start({
-      origin: "https://news.example",
-      mode: "protected",
-      blockedSubjects,
-    });
-    harness.observer.emit([blockedImage, ordinaryImage]);
-
-    expect(harness.renderer.activeFor(blockedImage)[0]?.options.blockedSubject).toBe(true);
-    harness.controller.applyMode("trusted");
-
-    expect(harness.renderer.activeFor(blockedImage)).toHaveLength(1);
-    expect(harness.renderer.activeFor(ordinaryImage)).toHaveLength(0);
-  });
-
-  it("keeps matching native and provider videos protected while a site becomes Trusted", () => {
-    const nativeVideo = document.createElement("video");
-    nativeVideo.poster = "donald-trump-campaign.jpg";
-    const providerFrame = document.createElement("iframe");
-    providerFrame.title = "Donald Trump campaign video";
-    document.body.append(nativeVideo, providerFrame);
-    const harness = controllerHarness(new Map<Element, MediaCandidate>([
-      [nativeVideo, candidate(nativeVideo, "native-video")],
-      [providerFrame, candidate(providerFrame, "video-iframe")],
-    ]));
-
-    harness.controller.start({
-      origin: "https://news.example",
-      mode: "protected",
-      blockedSubjects: { enabled: true, keywords: ["Trump"] },
-    });
-    harness.observer.emit([nativeVideo, providerFrame]);
-    harness.controller.applyMode("trusted");
-
-    expect(harness.renderer.activeFor(nativeVideo)).toHaveLength(1);
-    expect(harness.renderer.activeFor(providerFrame)).toHaveLength(1);
-  });
-
-  it("protects matching native and provider videos discovered on a Trusted site", () => {
-    const nativeVideo = document.createElement("video");
-    nativeVideo.poster = "donald-trump-campaign.jpg";
-    const providerFrame = document.createElement("iframe");
-    providerFrame.title = "Donald Trump campaign video";
-    const harness = controllerHarness(new Map<Element, MediaCandidate>([
-      [nativeVideo, candidate(nativeVideo, "native-video")],
-      [providerFrame, candidate(providerFrame, "video-iframe")],
-    ]));
-
-    harness.controller.start({
-      origin: "https://news.example",
-      mode: "trusted",
-      blockedSubjects: { enabled: true, keywords: ["Trump"] },
-    });
-    document.body.append(nativeVideo, providerFrame);
-    harness.observer.emit([nativeVideo, providerFrame]);
-
-    expect(harness.renderer.activeFor(nativeVideo)).toHaveLength(1);
-    expect(harness.renderer.activeFor(providerFrame)).toHaveLength(1);
-  });
-
-  it("matches a dynamic provider frame before trusting can replace its source", () => {
-    const providerFrame = document.createElement("iframe");
-    providerFrame.src = "https://www.youtube.com/embed/trump-campaign";
-    providerFrame.title = "Donald Trump campaign video";
-    const providerFrames = {
-      gate: vi.fn(),
-      release: vi.fn(),
-      regate: vi.fn(),
-      restore: vi.fn(),
-      trust: vi.fn((frame: HTMLIFrameElement) => {
-        frame.src = "about:blank";
-      }),
-      forget: vi.fn(),
-      dispose: vi.fn(),
-    };
-    const classify = vi.fn((element: Element) =>
-      element === providerFrame && providerFrame.src.includes("youtube.com")
-        ? candidate(providerFrame, "video-iframe")
-        : null,
-    );
-    const harness = controllerHarness(new Map(), { classify, providerFrames });
-
-    harness.controller.start({
-      origin: "https://news.example",
-      mode: "trusted",
-      blockedSubjects: { enabled: true, keywords: ["Trump"] },
-    });
-    document.body.append(providerFrame);
-    harness.observer.emit([providerFrame]);
-
-    expect(harness.providerFrames.trust).not.toHaveBeenCalled();
-    expect(harness.renderer.activeFor(providerFrame)).toHaveLength(1);
-  });
-
-  it("adds ordinary media when a Trusted site becomes Protected without duplicating subjects", () => {
-    const blockedImage = document.createElement("img");
-    blockedImage.alt = "Donald Trump at a campaign event";
-    const ordinaryImage = document.createElement("img");
-    ordinaryImage.alt = "A quiet lake";
-    document.body.append(blockedImage, ordinaryImage);
-    const harness = controllerHarness(new Map([
-      [blockedImage, candidate(blockedImage, "image")],
-      [ordinaryImage, candidate(ordinaryImage, "image")],
-    ]));
-
-    harness.controller.start({
-      origin: "https://news.example",
-      mode: "trusted",
-      blockedSubjects: { enabled: true, keywords: ["Trump"] },
-    });
-    harness.observer.emit([blockedImage, ordinaryImage]);
-    harness.controller.applyMode("protected");
-    harness.observer.emit([blockedImage, ordinaryImage]);
-
-    expect(harness.renderer.activeFor(blockedImage)).toHaveLength(1);
-    expect(harness.renderer.activeFor(ordinaryImage)).toHaveLength(1);
-  });
-
-  it("reconciles subject preference changes without replacing matching records", () => {
-    const blockedImage = document.createElement("img");
-    blockedImage.alt = "Donald Trump at a campaign event";
-    const ordinaryImage = document.createElement("img");
-    ordinaryImage.alt = "A quiet lake";
-    document.body.append(blockedImage, ordinaryImage);
-    const enabled = { enabled: true, keywords: ["Trump"] };
-    const disabled = { enabled: false, keywords: ["Trump"] };
-    const harness = controllerHarness(new Map([
-      [blockedImage, candidate(blockedImage, "image")],
-      [ordinaryImage, candidate(ordinaryImage, "image")],
-    ]));
-
-    harness.controller.start({
-      origin: "https://news.example",
-      mode: "trusted",
-      blockedSubjects: disabled,
-    });
-    harness.observer.emit([blockedImage, ordinaryImage]);
-    harness.controller.applyBlockedSubjects(enabled);
-    harness.observer.emit([blockedImage, ordinaryImage]);
-    const matchingRecord = harness.renderer.activeFor(blockedImage)[0];
-    harness.controller.applyBlockedSubjects(enabled);
-    harness.observer.emit([blockedImage, ordinaryImage]);
-
-    expect(harness.renderer.activeFor(blockedImage)[0]).toBe(matchingRecord);
-    expect(harness.renderer.activeFor(ordinaryImage)).toHaveLength(0);
-    harness.controller.applyBlockedSubjects(disabled);
-    expect(harness.renderer.activeFor(blockedImage)).toHaveLength(0);
-  });
-
-  it("updates a retained protected record's subject reason without losing its reveal", () => {
+  it("applies subject changes live without duplicate layers", () => {
     const image = document.createElement("img");
     image.alt = "Donald Trump at a campaign event";
     document.body.append(image);
     const harness = controllerHarness(new Map([[image, candidate(image, "image")]]));
     harness.controller.start({
       origin: "https://news.example",
-      mode: "protected",
       blockedSubjects: { enabled: false, keywords: ["Trump"] },
     });
     harness.observer.emit([image]);
-    const record = harness.renderer.activeFor(image)[0]!;
-    record.handle.reveal();
 
     harness.controller.applyBlockedSubjects({ enabled: true, keywords: ["Trump"] });
-
-    expect(harness.renderer.activeFor(image)[0]).toBe(record);
-    expect(record.handle.isRevealed()).toBe(true);
-    expect((record.handle as ProtectionHandle & { setBlockedSubject: ReturnType<typeof vi.fn> })
-      .setBlockedSubject).toHaveBeenLastCalledWith(true);
+    harness.observer.emit([image]);
+    harness.observer.emit([image]);
+    expect(harness.activeFor(image)).toHaveLength(1);
 
     harness.controller.applyBlockedSubjects({ enabled: false, keywords: ["Trump"] });
-    expect(harness.renderer.activeFor(image)[0]).toBe(record);
-    expect(record.handle.isRevealed()).toBe(true);
-    expect((record.handle as ProtectionHandle & { setBlockedSubject: ReturnType<typeof vi.fn> })
-      .setBlockedSubject).toHaveBeenLastCalledWith(false);
+    expect(harness.activeFor(image)).toHaveLength(0);
   });
 
-  it("protects matching subject media discovered after a Trusted site starts", () => {
-    const blockedImage = document.createElement("img");
-    blockedImage.alt = "Donald Trump at a campaign event";
-    const harness = controllerHarness(new Map([
-      [blockedImage, candidate(blockedImage, "image")],
-    ]));
-
-    harness.controller.start({
-      origin: "https://news.example",
-      mode: "trusted",
-      blockedSubjects: { enabled: true, keywords: ["Trump"] },
-    });
-    document.body.append(blockedImage);
-    harness.observer.emit([blockedImage]);
-    harness.observer.emit([blockedImage]);
-
-    expect(harness.renderer.activeFor(blockedImage)).toHaveLength(1);
-  });
-
-  it("classifies, describes, and protects one discovered candidate", () => {
-    const image = document.createElement("img");
-    document.body.append(image);
-    const media = candidate(image, "image");
-    const harness = controllerHarness(new Map([[image, media]]));
-    harness.controller.start({ origin: "https://news.example", mode: "protected" });
-
-    harness.observer.emit([image]);
-
-    expect(harness.observer.scan).toHaveBeenCalledWith(document);
-    expect(harness.classify).toHaveBeenCalledWith(image);
-    expect(harness.resolveDescription).toHaveBeenCalledWith(media);
-    expect(harness.renderer.protect).toHaveBeenCalledWith(
-      media,
-      expect.objectContaining({
-        description: "Description for image",
-        mode: "protected",
-      }),
-    );
-  });
-
-  it("secures a native video before rendering and release never starts playback", () => {
-    const video = document.createElement("video");
-    document.body.append(video);
-    const play = vi.spyOn(video, "play");
-    const harness = controllerHarness(
-      new Map([[video, candidate(video, "native-video")]]),
-    );
-    harness.controller.start({ origin: "https://news.example", mode: "protected" });
-    harness.observer.emit([video]);
-
-    expect(harness.nativeVideo.secure.mock.invocationCallOrder[0]).toBeLessThan(
-      harness.renderer.protect.mock.invocationCallOrder[0]!,
-    );
-    harness.renderer.items[0]?.handle.reveal();
-
-    expect(harness.nativeVideo.release).toHaveBeenCalledWith(video);
-    expect(play).not.toHaveBeenCalled();
-  });
-
-  it("reprotects only the selected strict native video", () => {
-    const first = document.createElement("video");
-    const second = document.createElement("video");
-    document.body.append(first, second);
-    const harness = controllerHarness(
-      new Map([
-        [first, candidate(first, "native-video")],
-        [second, candidate(second, "native-video")],
-      ]),
-    );
-    harness.controller.start({ origin: "https://news.example", mode: "strict" });
-    harness.observer.emit([first, second]);
-
-    harness.renderer.items[0]?.handle.reveal();
-    harness.renderer.items[0]?.handle.reprotect();
-
-    expect(harness.nativeVideo.reprotect).toHaveBeenCalledTimes(1);
-    expect(harness.nativeVideo.reprotect).toHaveBeenCalledWith(first);
-  });
-
-  it("persists the site description choice and applies it to current and future media", () => {
+  it("persists description visibility for current and future matches", () => {
     const first = document.createElement("img");
+    first.alt = "Donald Trump";
     const second = document.createElement("img");
+    second.alt = "President Trump";
     document.body.append(first, second);
     const setDescriptionsVisible = vi.fn();
     const harness = controllerHarness(new Map([
       [first, candidate(first, "image")],
       [second, candidate(second, "image")],
-    ]), { setDescriptionsVisible } as Partial<ContentControllerDependencies>);
+    ]), { setDescriptionsVisible });
     harness.controller.start({
       origin: "https://news.example",
-      mode: "protected",
       descriptionsVisible: false,
+      blockedSubjects: { enabled: true, keywords: ["Trump"] },
     });
     harness.observer.emit([first]);
 
-    const firstOptions = harness.renderer.items[0]?.options as ProtectionOptions & {
-      onToggleDescriptions?: () => void;
-      descriptionsVisible?: boolean;
-    };
-    expect(firstOptions.descriptionsVisible).toBe(false);
-    expect(typeof firstOptions.onToggleDescriptions).toBe("function");
-    firstOptions.onToggleDescriptions?.();
+    harness.items[0]?.options.onToggleDescriptions();
     expect(setDescriptionsVisible).toHaveBeenCalledWith("https://news.example", true);
-    expect(harness.renderer.items[0]?.handle.setDescriptionVisible).toHaveBeenCalledWith(true);
-
     harness.observer.emit([second]);
-    const secondOptions = harness.renderer.items[1]?.options as ProtectionOptions & {
-      descriptionsVisible?: boolean;
-    };
-    expect(secondOptions.descriptionsVisible).toBe(true);
+    expect(harness.items[1]?.options.descriptionsVisible).toBe(true);
   });
 
-  it("gates a provider before rendering and releases or regates only that frame", () => {
+  it("forgets gated provider state without restoring it during teardown", () => {
     const frame = document.createElement("iframe");
-    frame.src = "https://www.youtube.com/embed/abc?start=10";
+    frame.src = "https://www.youtube.com/embed/politics";
+    frame.title = "Donald Trump";
     document.body.append(frame);
-    const harness = controllerHarness(
-      new Map([[frame, candidate(frame, "video-iframe")]]),
-    );
-    harness.controller.start({ origin: "https://news.example", mode: "strict" });
-    harness.observer.emit([frame]);
-
-    expect(harness.providerFrames.gate.mock.invocationCallOrder[0]).toBeLessThan(
-      harness.renderer.protect.mock.invocationCallOrder[0]!,
-    );
-    harness.renderer.items[0]?.handle.reveal();
-    harness.renderer.items[0]?.handle.reprotect();
-
-    expect(harness.providerFrames.release).toHaveBeenCalledWith(frame);
-    expect(harness.providerFrames.regate).toHaveBeenCalledWith(frame);
-  });
-
-  it("re-protects and emits only a sanitized diagnostic when a provider allow rule fails", async () => {
-    const frame = document.createElement("iframe");
-    frame.src = "https://www.youtube.com/embed/private-video";
-    document.body.append(frame);
-    const log = vi.fn();
-    const providerFrames = {
-      gate: vi.fn(),
-      release: vi.fn().mockRejectedValue(new Error("secret provider URL failed")),
-      regate: vi.fn(),
-      restore: vi.fn(),
-      trust: vi.fn(),
-      forget: vi.fn(),
-    };
-    const harness = controllerHarness(
-      new Map([[frame, candidate(frame, "video-iframe")]]),
-      { providerFrames, development: true, logDiagnostic: log },
-    );
-    harness.controller.start({ origin: "https://news.example", mode: "protected" });
-    harness.observer.emit([frame]);
-
-    harness.renderer.items[0]?.handle.reveal();
-
-    await vi.waitFor(() => expect(harness.renderer.items[0]?.handle.isRevealed()).toBe(false));
-    expect(providerFrames.regate).toHaveBeenCalledWith(frame);
-    expect(log).toHaveBeenCalledWith("IFRAME", "provider allow rule failed");
-    expect(JSON.stringify(log.mock.calls)).not.toContain("secret");
-  });
-
-  it("switching to Trusted removes layers and restores native and provider state", () => {
-    const image = document.createElement("img");
-    const video = document.createElement("video");
-    const frame = document.createElement("iframe");
-    document.body.append(image, video, frame);
-    const harness = controllerHarness(
-      new Map<Element, MediaCandidate>([
-        [image, candidate(image, "image")],
-        [video, candidate(video, "native-video")],
-        [frame, candidate(frame, "video-iframe")],
-      ]),
-    );
-    harness.controller.start({ origin: "https://news.example", mode: "protected" });
-    harness.observer.emit([image, video, frame]);
-
-    harness.controller.applyMode("trusted");
-
-    expect(harness.observer.stop).not.toHaveBeenCalled();
-    expect(harness.observer.scan).toHaveBeenLastCalledWith(document);
-    expect(harness.renderer.items.map(({ handle }) => handle.remove)).toSatisfy(
-      (removes: Array<ReturnType<typeof vi.fn>>) =>
-        removes.every((remove) => remove.mock.calls.length === 1),
-    );
-    expect(harness.nativeVideo.restore).toHaveBeenCalledWith(video);
-    expect(harness.providerFrames.restore).toHaveBeenCalledWith(frame);
-  });
-
-  it("forgets provider state without a restore allow rule during page teardown", () => {
-    const frame = document.createElement("iframe");
-    document.body.append(frame);
-    const harness = controllerHarness(
-      new Map([[frame, candidate(frame, "video-iframe")]]),
-    );
-    harness.controller.start({ origin: "https://news.example", mode: "protected" });
+    const harness = controllerHarness(new Map([[frame, candidate(frame, "video-iframe")]]));
+    harness.controller.start({
+      origin: "https://news.example",
+      blockedSubjects: { enabled: true, keywords: ["Trump"] },
+    });
     harness.observer.emit([frame]);
 
     harness.controller.stop({ restoreMedia: false });
@@ -612,521 +203,86 @@ describe("ContentController", () => {
     expect(harness.providerFrames.restore).not.toHaveBeenCalled();
     expect(harness.providerFrames.dispose).toHaveBeenCalledTimes(1);
   });
-
-  it("disposes Trusted provider state during page teardown", () => {
-    const frame = document.createElement("iframe");
-    frame.src = "https://www.youtube.com/embed/trusted";
-    document.body.append(frame);
-    const harness = controllerHarness();
-    harness.controller.start({ origin: "https://news.example", mode: "trusted" });
-    harness.observer.emit([frame]);
-
-    harness.controller.stop({ restoreMedia: false });
-
-    expect(harness.providerFrames.dispose).toHaveBeenCalledTimes(1);
-    expect(harness.providerFrames.restore).not.toHaveBeenCalled();
-  });
-
-  it("keeps a deliberately revealed subject visible across a legacy Strict transition", () => {
-    const image = document.createElement("img");
-    image.alt = "Donald Trump at a campaign event";
-    document.body.append(image);
-    const harness = controllerHarness(
-      new Map([[image, candidate(image, "image")]]),
-    );
-    harness.controller.start({
-      origin: "https://news.example",
-      mode: "protected",
-      blockedSubjects: { enabled: true, keywords: ["Trump"] },
-    });
-    harness.observer.emit([image]);
-    const matchingRecord = harness.renderer.activeFor(image)[0];
-    matchingRecord?.handle.reveal();
-
-    harness.controller.applyMode("strict");
-
-    expect(harness.renderer.activeFor(image)[0]).toBe(matchingRecord);
-    expect(matchingRecord?.handle.isRevealed()).toBe(true);
-    expect(harness.renderer.protect).toHaveBeenCalledTimes(1);
-    expect(matchingRecord?.handle.remove).not.toHaveBeenCalled();
-  });
-
-  it("updates protected rectangles on resize and rebuilds on relevant attribute changes", () => {
-    const image = document.createElement("img");
-    document.body.append(image);
-    const harness = controllerHarness(
-      new Map([[image, candidate(image, "image")]]),
-    );
-    harness.controller.start({ origin: "https://news.example", mode: "protected" });
-    harness.observer.emit([image]);
-
-    harness.observer.emit([image]);
-    expect(harness.classify).toHaveBeenCalledTimes(1);
-    expect(harness.renderer.items[0]?.handle.update).toHaveBeenCalledTimes(1);
-
-    image.alt = "Changed description";
-    harness.observer.emit([image], [image]);
-    expect(harness.renderer.items[0]?.handle.remove).toHaveBeenCalledTimes(1);
-    expect(harness.classify).toHaveBeenCalledTimes(2);
-    expect(harness.renderer.protect).toHaveBeenCalledTimes(2);
-  });
-
-  it("isolates malformed candidates and logs no page-derived values", () => {
-    const broken = document.createElement("img");
-    broken.alt = "private alt";
-    broken.src = "https://private.example/secret.png";
-    const healthy = document.createElement("img");
-    document.body.append(broken, healthy);
-    const healthyCandidate = candidate(healthy, "image");
-    const log = vi.fn();
-    const classify = vi.fn((element: Element) => {
-      if (element === broken) {
-        throw new Error("bad https://private.example/secret.png <img alt='private alt'>");
-      }
-      return healthyCandidate;
-    });
-    const harness = controllerHarness(new Map(), {
-      classify,
-      development: true,
-      logDiagnostic: log,
-    });
-    harness.controller.start({ origin: "https://news.example", mode: "protected" });
-
-    harness.observer.emit([broken, healthy]);
-
-    expect(harness.renderer.protect).toHaveBeenCalledTimes(1);
-    expect(log).toHaveBeenCalledWith("IMG", "candidate processing failed");
-    expect(JSON.stringify(log.mock.calls)).not.toContain("private");
-    expect(JSON.stringify(log.mock.calls)).not.toContain("https://");
-    expect(JSON.stringify(log.mock.calls)).not.toContain("<img");
-  });
-
-  it("uses the browser development build flag for default sanitized diagnostics", () => {
-    const broken = document.createElement("img");
-    broken.alt = "private alt";
-    broken.src = "https://private.example/secret.png";
-    document.body.append(broken);
-    const observer = new FakeDocumentObserver();
-    const renderer = rendererHarness();
-    const log = vi.fn();
-    vi.stubGlobal("process", undefined);
-
-    try {
-      const controller = new ContentController({
-        document,
-        observer,
-        renderer,
-        classify: () => {
-          throw new Error("bad https://private.example/secret.png <img alt='private alt'>");
-        },
-        logDiagnostic: log,
-      });
-      controller.start({ origin: "https://news.example", mode: "protected" });
-
-      observer.emit([broken]);
-
-      expect(log).toHaveBeenCalledWith("IMG", "candidate processing failed");
-      expect(JSON.stringify(log.mock.calls)).not.toContain("private");
-      expect(JSON.stringify(log.mock.calls)).not.toContain("https://");
-      expect(JSON.stringify(log.mock.calls)).not.toContain("<img");
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  });
-
-  it("keeps native protection during attribute churn and continues the batch", () => {
-    const video = document.createElement("video");
-    const healthyImage = document.createElement("img");
-    document.body.append(video, healthyImage);
-    const videoCandidate = candidate(video, "native-video");
-    const imageCandidate = candidate(healthyImage, "image");
-    const classify = vi.fn((element: Element) => {
-      if (element === video) return videoCandidate;
-      return element === healthyImage ? imageCandidate : null;
-    });
-    const harness = controllerHarness(new Map(), { classify });
-    harness.controller.start({ origin: "https://news.example", mode: "protected" });
-    harness.observer.emit([video]);
-
-    harness.observer.emit([video, healthyImage], [video]);
-
-    expect(harness.nativeVideo.reprotect).toHaveBeenCalledWith(video);
-    expect(harness.nativeVideo.restore).not.toHaveBeenCalled();
-    expect(harness.renderer.items[0]?.handle.remove).not.toHaveBeenCalled();
-    expect(harness.renderer.protect).toHaveBeenCalledTimes(2);
-    expect(harness.renderer.items[1]?.candidate).toBe(imageCandidate);
-  });
-
-  it("regates an externally replaced provider source and reveals that exact new source", async () => {
-    const frame = document.createElement("iframe");
-    frame.setAttribute("src", "https://www.youtube.com/embed/first?start=10#one");
-    document.body.append(frame);
-    const media = candidate(frame, "video-iframe");
-    const navigate = vi.fn();
-    const realProviderFrames = new ProviderFrameController({
-      authorize: async (source, disableAutoplay) => {
-        const url = new URL(source);
-        if (disableAutoplay) url.searchParams.set("autoplay", "0");
-        url.searchParams.set("eg_eclipse_goggles", "controller-token");
-        return { grantId: 91, source: url.href };
-      },
-      revoke: vi.fn().mockResolvedValue(undefined),
-    }, {
-      prepare: vi.fn().mockResolvedValue(undefined),
-      navigate,
-    });
-    const harness = controllerHarness(new Map([[frame, media]]), {
-      providerFrames: realProviderFrames,
-    });
-    harness.controller.start({ origin: "https://news.example", mode: "protected" });
-    harness.observer.emit([frame]);
-    expect(frame.getAttribute("src")).toBe("https://www.youtube.com/embed/first?start=10#one");
-
-    const replacement = "https://player.vimeo.com/video/456?autoplay=0#two";
-    frame.setAttribute("src", replacement);
-    harness.observer.emit([frame], [frame]);
-
-    expect(harness.renderer.items[0]?.handle.remove).toHaveBeenCalledTimes(1);
-    expect(harness.renderer.protect).toHaveBeenCalledTimes(2);
-    expect(frame.getAttribute("src")).toBe(replacement);
-    harness.renderer.items[1]?.handle.reveal();
-    await vi.waitFor(() => {
-      expect(navigate).toHaveBeenCalledTimes(1);
-      const released = new URL(navigate.mock.calls[0]![1]);
-      expect(released.origin + released.pathname).toBe("https://player.vimeo.com/video/456");
-      expect(released.searchParams.get("autoplay")).toBe("0");
-      expect(released.searchParams.get("eg_eclipse_goggles")).toBe("controller-token");
-      expect(released.hash).toBe("#two");
-      expect(frame.getAttribute("src")).toBe(replacement);
-    });
-  });
 });
 
-function bootstrapHarness(
+function bootstrapDependencies(
   overrides: Partial<ContentBootstrapDependencies> = {},
-): {
-  dependencies: ContentBootstrapDependencies;
+): ContentBootstrapDependencies & {
   controller: {
     start: ReturnType<typeof vi.fn>;
-    applyMode: ReturnType<typeof vi.fn>;
     applyBlockedSubjects: ReturnType<typeof vi.fn>;
     stop: ReturnType<typeof vi.fn>;
   };
-  sendMessage: ReturnType<typeof vi.fn>;
-  watchPolicy: ReturnType<typeof vi.fn>;
-  addPageHideListener: ReturnType<typeof vi.fn>;
 } {
   const controller = {
-    start: vi.fn(),
-    applyMode: vi.fn(),
+    start: vi.fn<(context: ProtectionContext) => void>(),
     applyBlockedSubjects: vi.fn(),
     stop: vi.fn(),
   };
-  const sendMessage = vi.fn().mockResolvedValue({
-    origin: "https://top.example",
-    mode: "strict" satisfies SiteMode,
-  });
-  const watchPolicy = vi.fn(() => vi.fn());
-  const getDescriptionsVisible = vi.fn().mockResolvedValue(false);
-  const getBlockedSubjects = vi.fn().mockResolvedValue({ enabled: false, keywords: [] });
-  const watchBlockedSubjects = vi.fn(() => vi.fn());
-  const addPageHideListener = vi.fn();
-  const dependencies: ContentBootstrapDependencies = {
-    href: "https://child.example/story",
+  return {
+    controller,
+    href: "https://news.example/story",
     isChildFrame: false,
     parentLocation: () => null,
     createController: () => controller,
-    sendMessage,
-    getDescriptionsVisible,
-    getBlockedSubjects,
-    watchPolicy,
-    watchBlockedSubjects,
-    addPageHideListener,
+    getDescriptionsVisible: vi.fn().mockResolvedValue(false),
+    getBlockedSubjects: vi.fn().mockResolvedValue({ enabled: true, keywords: ["Trump"] }),
+    watchBlockedSubjects: vi.fn(() => () => undefined),
+    addPageHideListener: vi.fn(),
     ...overrides,
   };
-  return { dependencies, controller, sendMessage, watchPolicy, addPageHideListener };
 }
 
-describe("content-script bootstrap", () => {
-  it("falls back to Protected when policy messaging rejects without persisting or watching", async () => {
-    const harness = bootstrapHarness({
-      sendMessage: vi.fn().mockRejectedValue(new Error("storage unavailable")),
+describe("bootstrapContentScript", () => {
+  it("starts with local subject and description preferences", async () => {
+    const deps = bootstrapDependencies({
+      getDescriptionsVisible: vi.fn().mockResolvedValue(true),
     });
 
-    await bootstrapContentScript(harness.dependencies);
+    await bootstrapContentScript(deps);
 
-    expect(harness.controller.start).toHaveBeenCalledWith({
-      origin: "https://child.example",
-      mode: "protected",
-    });
-    expect(harness.watchPolicy).not.toHaveBeenCalled();
-    expect(chrome.storage.local.set).not.toHaveBeenCalled();
-  });
-
-  it("falls back to Protected when the policy response is rejected as malformed", async () => {
-    const harness = bootstrapHarness({
-      sendMessage: vi.fn().mockResolvedValue({ error: "unsupported-page" }),
-    });
-
-    await bootstrapContentScript(harness.dependencies);
-
-    expect(harness.controller.start).toHaveBeenCalledWith({
-      origin: "https://child.example",
-      mode: "protected",
-    });
-    expect(harness.watchPolicy).not.toHaveBeenCalled();
-    expect(chrome.storage.local.set).not.toHaveBeenCalled();
-  });
-
-  it("starts the returned policy and watches only its exact top origin", async () => {
-    const harness = bootstrapHarness();
-
-    await bootstrapContentScript(harness.dependencies);
-
-    expect(harness.sendMessage).toHaveBeenCalledWith({ type: "policy:get-current" });
-    expect(harness.controller.start).toHaveBeenCalledWith({
-      origin: "https://top.example",
-      mode: "strict",
-      descriptionsVisible: false,
-    });
-    expect(harness.watchPolicy).toHaveBeenCalledWith(
-      "https://top.example",
-      expect.any(Function),
-    );
-    const listener = harness.watchPolicy.mock.calls[0]?.[1] as
-      | ((mode: SiteMode) => void)
-      | undefined;
-    listener?.("trusted");
-    expect(harness.controller.applyMode).toHaveBeenCalledWith("trusted");
-  });
-
-  it("starts with a policy change received while preferences are still loading", async () => {
-    let resolveDescriptions: ((visible: boolean) => void) | undefined;
-    const descriptions = new Promise<boolean>((resolve) => {
-      resolveDescriptions = resolve;
-    });
-    let listener: ((mode: SiteMode) => void) | undefined;
-    const harness = bootstrapHarness({
-      getDescriptionsVisible: vi.fn(() => descriptions),
-      watchPolicy: vi.fn((_origin, next) => {
-        listener = next;
-        return vi.fn();
-      }),
-    });
-
-    const bootstrapping = bootstrapContentScript(harness.dependencies);
-    await vi.waitFor(() => expect(listener).toBeTypeOf("function"));
-    listener?.("trusted");
-    resolveDescriptions?.(false);
-    await bootstrapping;
-
-    expect(harness.controller.start).toHaveBeenCalledWith({
-      origin: "https://top.example",
-      mode: "trusted",
-      descriptionsVisible: false,
-    });
-    expect(harness.controller.applyMode).not.toHaveBeenCalled();
-  });
-
-  it("confirms the current policy after subscribing so an earlier change is not missed", async () => {
-    const sendMessage = vi.fn()
-      .mockResolvedValueOnce({ origin: "https://top.example", mode: "protected" })
-      .mockResolvedValueOnce({ origin: "https://top.example", mode: "trusted" });
-    const harness = bootstrapHarness({
-      sendMessage,
-    });
-
-    await bootstrapContentScript(harness.dependencies);
-
-    expect(sendMessage).toHaveBeenCalledTimes(2);
-    expect(harness.controller.start).toHaveBeenCalledWith({
-      origin: "https://top.example",
-      mode: "trusted",
-      descriptionsVisible: false,
-    });
-  });
-
-  it("does not let a stale confirmation overwrite a newer policy event", async () => {
-    let resolveConfirmation: ((value: unknown) => void) | undefined;
-    const confirmation = new Promise<unknown>((resolve) => {
-      resolveConfirmation = resolve;
-    });
-    let listener: ((mode: SiteMode) => void) | undefined;
-    const harness = bootstrapHarness({
-      sendMessage: vi.fn()
-        .mockResolvedValueOnce({ origin: "https://top.example", mode: "protected" })
-        .mockImplementationOnce(() => confirmation),
-      watchPolicy: vi.fn((_origin, next) => {
-        listener = next;
-        return vi.fn();
-      }),
-    });
-
-    const bootstrapping = bootstrapContentScript(harness.dependencies);
-    await vi.waitFor(() => expect(listener).toBeTypeOf("function"));
-    listener?.("trusted");
-    resolveConfirmation?.({ origin: "https://top.example", mode: "protected" });
-    await bootstrapping;
-
-    expect(harness.controller.start).toHaveBeenCalledWith({
-      origin: "https://top.example",
-      mode: "trusted",
-      descriptionsVisible: false,
-    });
-  });
-
-  it("starts with a blocked-subject change received while preferences are loading", async () => {
-    let resolveSubjects: ((config: { enabled: boolean; keywords: string[] }) => void) | undefined;
-    const subjects = new Promise<{ enabled: boolean; keywords: string[] }>((resolve) => {
-      resolveSubjects = resolve;
-    });
-    let listener: ((config: { enabled: boolean; keywords: string[] }) => void) | undefined;
-    const harness = bootstrapHarness({
-      getBlockedSubjects: vi.fn(() => subjects),
-      watchBlockedSubjects: vi.fn((next) => {
-        listener = next;
-        return vi.fn();
-      }),
-    });
-
-    const bootstrapping = bootstrapContentScript(harness.dependencies);
-    await vi.waitFor(() => expect(listener).toBeTypeOf("function"));
-    listener?.({ enabled: true, keywords: ["Donald Trump"] });
-    resolveSubjects?.({ enabled: false, keywords: [] });
-    await bootstrapping;
-
-    expect(harness.controller.start).toHaveBeenCalledWith({
-      origin: "https://top.example",
-      mode: "strict",
-      descriptionsVisible: false,
-      blockedSubjects: { enabled: true, keywords: ["Donald Trump"] },
-    });
-    expect(harness.controller.applyBlockedSubjects).not.toHaveBeenCalled();
-  });
-
-  it("starts with the permanent description choice for the top origin", async () => {
-    const getDescriptionsVisible = vi.fn().mockResolvedValue(true);
-    const harness = bootstrapHarness({ getDescriptionsVisible });
-
-    await bootstrapContentScript(harness.dependencies);
-
-    expect(getDescriptionsVisible).toHaveBeenCalledWith("https://top.example");
-    expect(harness.controller.start).toHaveBeenCalledWith({
-      origin: "https://top.example",
-      mode: "strict",
+    expect(deps.controller.start).toHaveBeenCalledWith({
+      origin: "https://news.example",
       descriptionsVisible: true,
+      blockedSubjects: { enabled: true, keywords: ["Trump"] },
     });
   });
 
-  it("starts and live-updates the enabled blocked-subject preset", async () => {
-    const initial = { enabled: true, keywords: ["Trump", "Donald Trump"] };
-    let listener: ((config: typeof initial) => void) | undefined;
-    const harness = bootstrapHarness({
-      getBlockedSubjects: vi.fn().mockResolvedValue(initial),
-      watchBlockedSubjects: vi.fn((next) => {
-        listener = next;
-        return vi.fn();
-      }),
+  it("applies storage changes that arrive after startup", async () => {
+    let listener!: (config: { enabled: boolean; keywords: string[] }) => void;
+    const deps = bootstrapDependencies({
+      watchBlockedSubjects: vi.fn((next) => { listener = next; return () => undefined; }),
     });
+    await bootstrapContentScript(deps);
 
-    await bootstrapContentScript(harness.dependencies);
+    listener({ enabled: false, keywords: ["Trump"] });
 
-    expect(harness.controller.start).toHaveBeenCalledWith({
-      origin: "https://top.example",
-      mode: "strict",
-      descriptionsVisible: false,
-      blockedSubjects: initial,
+    expect(deps.controller.applyBlockedSubjects).toHaveBeenCalledWith({
+      enabled: false,
+      keywords: ["Trump"],
     });
-    const updated = { enabled: true, keywords: ["President Trump"] };
-    listener?.(updated);
-    expect(harness.controller.applyBlockedSubjects).toHaveBeenCalledWith(updated);
   });
 
-  it("keeps the site policy when the optional description preference cannot load", async () => {
-    const harness = bootstrapHarness({
-      getDescriptionsVisible: vi.fn().mockRejectedValue(new Error("storage unavailable")),
+  it("fails open when subject storage cannot be read", async () => {
+    const deps = bootstrapDependencies({
+      getBlockedSubjects: vi.fn().mockRejectedValue(new Error("storage unavailable")),
     });
 
-    await bootstrapContentScript(harness.dependencies);
+    await bootstrapContentScript(deps);
 
-    expect(harness.controller.start).toHaveBeenCalledWith({
-      origin: "https://top.example",
-      mode: "strict",
-      descriptionsVisible: false,
-    });
-    expect(harness.watchPolicy).toHaveBeenCalledWith(
-      "https://top.example",
-      expect.any(Function),
-    );
+    expect(deps.controller.start).toHaveBeenCalledWith(expect.objectContaining({
+      blockedSubjects: { enabled: false, keywords: [] },
+    }));
   });
 
-  it.each([
-    "https://www.youtube.com/embed/abc",
-    "https://www.youtube-nocookie.com/embed/abc?start=10",
-    "https://player.vimeo.com/video/123#t=5s",
-  ])("returns before policy lookup in a recognized provider child document: %s", async (href) => {
-    const harness = bootstrapHarness({ href, isChildFrame: true });
-
-    await bootstrapContentScript(harness.dependencies);
-
-    expect(harness.sendMessage).not.toHaveBeenCalled();
-    expect(harness.controller.start).not.toHaveBeenCalled();
-    expect(harness.watchPolicy).not.toHaveBeenCalled();
-  });
-
-  it("allows a child about:blank created by a supported parent", async () => {
-    const harness = bootstrapHarness({
-      href: "about:blank",
+  it("does not run inside a supported provider document", async () => {
+    const deps = bootstrapDependencies({
+      href: "https://www.youtube.com/embed/example",
       isChildFrame: true,
-      parentLocation: () => ({ protocol: "https:", origin: "https://top.example" }),
     });
 
-    await bootstrapContentScript(harness.dependencies);
+    await bootstrapContentScript(deps);
 
-    expect(harness.sendMessage).toHaveBeenCalledWith({ type: "policy:get-current" });
-    expect(harness.controller.start).toHaveBeenCalled();
-  });
-
-  it("returns on unsupported top-level schemes", async () => {
-    const harness = bootstrapHarness({ href: "file:///tmp/page.html" });
-
-    await bootstrapContentScript(harness.dependencies);
-
-    expect(harness.sendMessage).not.toHaveBeenCalled();
-    expect(harness.controller.start).not.toHaveBeenCalled();
-  });
-
-  it("stops policy watching and discards provider grants without restoring on pagehide", async () => {
-    const stopWatching = vi.fn();
-    const harness = bootstrapHarness({ watchPolicy: vi.fn(() => stopWatching) });
-    await bootstrapContentScript(harness.dependencies);
-
-    const onPageHide = harness.addPageHideListener.mock.calls[0]?.[0] as
-      | (() => void)
-      | undefined;
-    onPageHide?.();
-
-    expect(stopWatching).toHaveBeenCalledTimes(1);
-    expect(harness.controller.stop).toHaveBeenCalledWith({ restoreMedia: false });
-  });
-
-  it("does not start after pagehide wins a pending policy lookup", async () => {
-    let resolvePolicy!: (value: unknown) => void;
-    const pendingPolicy = new Promise<unknown>((resolve) => {
-      resolvePolicy = resolve;
-    });
-    const harness = bootstrapHarness({ sendMessage: vi.fn(() => pendingPolicy) });
-
-    const bootstrap = bootstrapContentScript(harness.dependencies);
-    const onPageHide = harness.addPageHideListener.mock.calls[0]?.[0] as
-      | (() => void)
-      | undefined;
-    onPageHide?.();
-    resolvePolicy({ origin: "https://top.example", mode: "strict" });
-    await bootstrap;
-
-    expect(harness.controller.stop).toHaveBeenCalledWith({ restoreMedia: false });
-    expect(harness.controller.start).not.toHaveBeenCalled();
-    expect(harness.watchPolicy).not.toHaveBeenCalled();
+    expect(deps.controller.start).not.toHaveBeenCalled();
   });
 });

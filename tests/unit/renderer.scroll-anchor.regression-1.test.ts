@@ -59,7 +59,6 @@ it("keeps the info control anchored to the media bottom-left while scrolling", (
     { element: image, kind: "image" } satisfies MediaCandidate,
     {
       description: "A news photograph",
-      mode: "protected",
       onReveal: vi.fn(),
       onToggleDescriptions: vi.fn(),
       descriptionsVisible: false,
@@ -68,11 +67,11 @@ it("keeps the info control anchored to the media bottom-left while scrolling", (
   );
   const layer = renderer.debugLayerFor(image);
 
-  expect(layer?.style.getPropertyValue("--eg-caption-bottom")).toBe("12px");
+  expect(layer?.style.getPropertyValue("--buof-caption-bottom")).toBe("12px");
 
   imageBox.mockReturnValue(rect(111, -188, 620, 800));
   window.dispatchEvent(new Event("scroll"));
   frames.flush();
 
-  expect(layer?.style.getPropertyValue("--eg-caption-bottom")).toBe("12px");
+  expect(layer?.style.getPropertyValue("--buof-caption-bottom")).toBe("12px");
 });

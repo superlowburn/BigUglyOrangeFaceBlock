@@ -69,16 +69,16 @@ describe("resolveDescription", () => {
 
   it("uses exact kind-specific fallback copy", () => {
     expect(resolveDescription(candidate(document.createElement("img"), "image"))).toBe(
-      "Image protected by Goggles",
+      "Image frosted by Big Ugly Orange Face",
     );
     expect(resolveDescription(candidate(document.createElement("div"), "background-image"))).toBe(
-      "Background image protected by Goggles",
+      "Background image frosted by Big Ugly Orange Face",
     );
     expect(resolveDescription(candidate(document.createElement("video"), "native-video"))).toBe(
-      "Video protected by Goggles",
+      "Video frosted by Big Ugly Orange Face",
     );
     expect(resolveDescription(candidate(document.createElement("iframe"), "video-iframe"))).toBe(
-      "Embedded video protected by Goggles",
+      "Embedded video frosted by Big Ugly Orange Face",
     );
   });
 

@@ -15,7 +15,7 @@ describe("ProviderRequestGate", () => {
       "https://www.youtube.com/embed/abc?autoplay=1&start=4#chapter",
     )).resolves.toEqual({
       grantId: 9001,
-      source: "https://www.youtube.com/embed/abc?autoplay=0&start=4&eg_eclipse_goggles=fixed-token#chapter",
+      source: "https://www.youtube.com/embed/abc?autoplay=0&start=4&buof_grant=fixed-token#chapter",
     });
     expect(updateSessionRules).toHaveBeenCalledWith({
       addRules: [{
@@ -23,7 +23,7 @@ describe("ProviderRequestGate", () => {
         priority: 2,
         action: { type: "allow" },
         condition: {
-          regexFilter: "^https://www\\.youtube\\.com/embed/abc\\?autoplay=0&start=4&eg_eclipse_goggles=fixed-token$",
+          regexFilter: "^https://www\\.youtube\\.com/embed/abc\\?autoplay=0&start=4&buof_grant=fixed-token$",
           resourceTypes: ["sub_frame"],
           tabIds: [7],
         },
