@@ -25,27 +25,28 @@ main {
 
 .hero {
   display: grid;
-  grid-template-columns: 180px 1fr;
-  gap: 28px;
+  grid-template-columns: 112px 1fr;
+  gap: 32px;
   min-height: 0;
-  padding: 30px 0 34px;
+  padding: 38px 0;
   align-items: center;
   border-bottom: 1px solid var(--line);
 }
 
 .brand {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  font-size: 18px;
+  margin: 0 0 4px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .brand-mark {
-  width: 52px;
-  height: 52px;
+  width: 112px;
+  height: 112px;
   overflow: visible;
 }
-.brand-copy { display: grid; line-height: 1.15; }
 
 .hero-copy { align-self: center; }
 
@@ -68,11 +69,12 @@ h1 {
   letter-spacing: -0.025em;
 }
 
-.hero-copy > p:last-child {
+.tagline {
   max-width: 560px;
   margin: 0;
-  color: var(--muted);
-  font-size: 16px;
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1.4;
 }
 
 section {
@@ -189,6 +191,7 @@ button:focus-visible {
 @media (max-width: 760px) {
   main { width: min(100% - 28px, 620px); }
   .hero { grid-template-columns: 1fr; gap: 18px; min-height: 0; padding: 24px 0 28px; }
+  .brand-mark { width: 88px; height: 88px; }
   section { grid-template-columns: 1fr; gap: 4px; padding: 44px 0; }
 }
 

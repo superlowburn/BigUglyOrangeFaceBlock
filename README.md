@@ -1,8 +1,14 @@
+<p align="center">
+  <img src="public/icons/icon.svg" width="128" height="128" alt="Big Ugly Orange Face logo">
+</p>
+
 # Big Ugly Orange Face
 
-Big Ugly Orange Face is a Chrome extension that frosts likely matches for subjects you choose. Ordinary images and videos remain visible.
+> Frosts over pictures of the Orange One so you don't see that Big Ugly Orange Face everywhere.
 
-The built-in preset targets Donald Trump using local page evidence such as descriptions, filenames, captions, links, nearby titles, and video posters. Matching is best effort: the extension can miss an image or frost an unrelated one. It does not perform face recognition or upload page content.
+Big Ugly Orange Face is a Chrome extension that frosts likely pictures of Donald Trump while leaving ordinary images and videos visible. It works locally using descriptions, filenames, captions, links, nearby titles, and video posters. It does not perform face recognition or upload page content.
+
+Repository: [github.com/superlowburn/BigUglyOrangeFaceBlock](https://github.com/superlowburn/BigUglyOrangeFaceBlock)
 
 ## What it does
 
@@ -13,6 +19,17 @@ The built-in preset targets Donald Trump using local page evidence such as descr
 - Pauses and mutes matched native videos.
 - Withholds matched YouTube and Vimeo embeds until you reveal them.
 - Stores settings locally.
+
+## Install the ZIP
+
+Chrome cannot load the ZIP directly. Download and extract it first.
+
+1. Download [big-ugly-orange-face-0.1.0.zip](big-ugly-orange-face-0.1.0.zip).
+2. Double-click the ZIP to extract it.
+3. Open `chrome://extensions` in Chrome.
+4. Turn on **Developer mode**.
+5. Click **Load unpacked**.
+6. Select the extracted `big-ugly-orange-face-0.1.0` folder. It should contain `manifest.json` at its top level.
 
 ## Install from source
 
@@ -28,7 +45,7 @@ In Chrome, open `chrome://extensions`, enable **Developer mode**, choose **Load 
 ## Use
 
 1. Open the extension's Settings page.
-2. Turn on **Donald Trump** under **Subjects to frost**.
+2. Turn on **Donald Trump** under **Subjects to frost**. It is off until you enable it.
 3. Edit the matching words if needed.
 4. Click a frosted item to reveal it; use **Frost again** to cover it again.
 

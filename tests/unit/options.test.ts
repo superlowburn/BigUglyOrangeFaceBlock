@@ -28,7 +28,12 @@ describe("mountOptions", () => {
     await mountOptions(root, chromeApi({ "legacy-site-rule": "ignored" }));
 
     expect(document.title).toBe("Big Ugly Orange Face Settings");
+    expect(root.querySelector<HTMLImageElement>(".brand-mark")?.getAttribute("src"))
+      .toBe("../icons/icon.svg");
     expect(root.textContent).toContain("Big Ugly Orange Face");
+    expect(root.textContent).toContain(
+      "Frosts over pictures of the Orange One so you don't see that Big Ugly Orange Face everywhere.",
+    );
     expect(root.textContent).toContain("Subjects to frost");
     expect(root.textContent).not.toContain("Sites showing");
     expect(root.querySelector("#site-rules")).toBeNull();
