@@ -2,28 +2,30 @@ import { describe, expect, it, vi } from "vitest";
 import { ProviderRequestGate } from "../../src/background/provider-request-gate";
 
 describe("ProviderRequestGate", () => {
-  it("authorizes one tab-scoped nonce URL with autoplay disabled", async () => {
+  it("authorizes one tab-scoped URL without identifying the extension", async () => {
     const updateSessionRules = vi.fn().mockResolvedValue(undefined);
     const gate = new ProviderRequestGate({
       updateSessionRules,
-      token: () => "fixed-token",
       ruleId: () => 9001,
     });
 
-    await expect(gate.authorize(
+    const authorization = await gate.authorize(
       7,
       "https://www.youtube.com/embed/abc?autoplay=1&start=4#chapter",
-    )).resolves.toEqual({
+    );
+
+    expect(authorization).toEqual({
       grantId: 9001,
-      source: "https://www.youtube.com/embed/abc?autoplay=0&start=4&buof_grant=fixed-token#chapter",
+      source: "https://www.youtube.com/embed/abc?autoplay=0&start=4#chapter",
     });
+    expect(new URL(authorization.source).searchParams.has("buof_grant")).toBe(false);
     expect(updateSessionRules).toHaveBeenCalledWith({
       addRules: [{
         id: 9001,
         priority: 2,
         action: { type: "allow" },
         condition: {
-          regexFilter: "^https://www\\.youtube\\.com/embed/abc\\?autoplay=0&start=4&buof_grant=fixed-token$",
+          regexFilter: "^https://www\\.youtube\\.com/embed/abc\\?autoplay=0&start=4$",
           resourceTypes: ["sub_frame"],
           tabIds: [7],
         },
@@ -36,7 +38,6 @@ describe("ProviderRequestGate", () => {
     const updateSessionRules = vi.fn();
     const gate = new ProviderRequestGate({
       updateSessionRules,
-      token: () => "fixed-token",
       ruleId: () => 9001,
     });
 
@@ -50,7 +51,6 @@ describe("ProviderRequestGate", () => {
     const updateSessionRules = vi.fn().mockResolvedValue(undefined);
     const gate = new ProviderRequestGate({
       updateSessionRules,
-      token: () => "fixed-token",
       ruleId: () => 9001,
     });
     await gate.authorize(7, "https://player.vimeo.com/video/123?autoplay=1");
@@ -77,7 +77,6 @@ describe("ProviderRequestGate", () => {
     const restartedGate = new ProviderRequestGate({
       updateSessionRules,
       getSessionRules,
-      token: () => "fixed-token",
       ruleId: () => 9001,
     });
 
@@ -92,7 +91,6 @@ describe("ProviderRequestGate", () => {
     let expire!: () => void;
     const gate = new ProviderRequestGate({
       updateSessionRules,
-      token: () => "fixed-token",
       ruleId: () => 9001,
       setTimeout: (callback, delay) => {
         expect(delay).toBe(10_000);
@@ -118,7 +116,6 @@ describe("ProviderRequestGate", () => {
     let nextId = 9000;
     const gate = new ProviderRequestGate({
       updateSessionRules,
-      token: () => "fixed-token",
       ruleId: () => ++nextId,
       setTimeout: () => 1,
       clearTimeout: vi.fn(),
@@ -164,7 +161,6 @@ describe("ProviderRequestGate", () => {
     let nextId = 70;
     const gate = new ProviderRequestGate({
       updateSessionRules,
-      token: () => `token-${nextId}`,
       ruleId: () => ++nextId,
       setTimeout: () => 1,
       clearTimeout: vi.fn(),

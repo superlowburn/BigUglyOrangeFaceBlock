@@ -15,7 +15,6 @@ export interface ProviderRequestGateEnvironment {
   getSessionRules?(filter: chrome.declarativeNetRequest.GetRulesFilter): Promise<
     chrome.declarativeNetRequest.Rule[]
   >;
-  token?: () => string;
   ruleId?: () => number;
   setTimeout?: (callback: () => void, delay: number) => number;
   clearTimeout?: (handle: number) => void;
@@ -33,7 +32,6 @@ export class ProviderRequestGate {
   private readonly getSessionRules: ((
     filter: chrome.declarativeNetRequest.GetRulesFilter,
   ) => Promise<chrome.declarativeNetRequest.Rule[]>) | undefined;
-  private readonly token: () => string;
   private readonly ruleId: () => number;
   private readonly setTimer: (callback: () => void, delay: number) => number;
   private readonly clearTimer: (handle: number) => void;
@@ -43,7 +41,6 @@ export class ProviderRequestGate {
   constructor(environment: ProviderRequestGateEnvironment) {
     this.updateSessionRules = environment.updateSessionRules;
     this.getSessionRules = environment.getSessionRules;
-    this.token = environment.token ?? randomToken;
     this.ruleId = environment.ruleId ?? randomRuleId;
     this.setTimer = environment.setTimeout ?? ((callback, delay) => self.setTimeout(callback, delay));
     this.clearTimer = environment.clearTimeout ?? ((handle) => self.clearTimeout(handle));
@@ -82,7 +79,6 @@ export class ProviderRequestGate {
     if (!parsed) throw new TypeError("Unsupported provider URL");
 
     if (disableAutoplay) parsed.searchParams.set("autoplay", "0");
-    parsed.searchParams.set("buof_grant", this.token());
     const grantId = this.uniqueRuleId();
     const requestUrl = new URL(parsed.href);
     requestUrl.hash = "";
@@ -162,12 +158,6 @@ export class ProviderRequestGate {
     this.operations = result.then(() => undefined, () => undefined);
     return result;
   }
-}
-
-function randomToken(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function randomRuleId(): number {

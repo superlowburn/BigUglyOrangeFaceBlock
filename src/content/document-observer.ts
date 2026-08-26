@@ -44,6 +44,7 @@ export class DocumentObserver {
   private observedForResize = new Set<Element>();
   private activeLayoutTargets = new WeakSet<Element>();
   private attributeChanges = new WeakSet<Element>();
+  private sourceChanges = new WeakMap<Element, number>();
   private mutationObserver: MutationObserverLike | null = null;
   private resizeObserver: ResizeObserverLike | null = null;
   private onCandidates: ((elements: readonly Element[]) => void) | null = null;
@@ -112,6 +113,10 @@ export class DocumentObserver {
     return this.attributeChanges.has(element);
   }
 
+  sourceChangeCount(element: Element): number {
+    return this.sourceChanges.get(element) ?? 0;
+  }
+
   stop(): void {
     this.document.removeEventListener(openShadowEvent, this.onOpenShadow);
     this.mutationObserver?.disconnect();
@@ -125,6 +130,7 @@ export class DocumentObserver {
     this.observedRoots = new WeakSet<Node>();
     this.activeLayoutTargets = new WeakSet<Element>();
     this.attributeChanges = new WeakSet<Element>();
+    this.sourceChanges = new WeakMap<Element, number>();
     this.layoutDirty = false;
     if (this.frame !== null) this.cancelFrame(this.frame);
     this.frame = null;
@@ -146,6 +152,12 @@ export class DocumentObserver {
     if (record.type === "attributes") {
       if (record.target instanceof Element && !isExtensionOwned(record.target)) {
         this.layoutDirty = true;
+        if (record.attributeName === "src") {
+          this.sourceChanges.set(
+            record.target,
+            (this.sourceChanges.get(record.target) ?? 0) + 1,
+          );
+        }
         this.trackTree(record.target, true);
       }
       return;
@@ -264,7 +276,10 @@ export class DocumentObserver {
     try {
       if (elements.length > 0) this.onCandidates(elements);
     } finally {
-      for (const element of elements) this.attributeChanges.delete(element);
+      for (const element of elements) {
+        this.attributeChanges.delete(element);
+        this.sourceChanges.delete(element);
+      }
       if (this.layoutDirty) {
         this.layoutDirty = false;
         this.onLayoutChange?.();

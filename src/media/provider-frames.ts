@@ -33,6 +33,7 @@ interface ProviderFrameState {
   authorizedSource?: string;
   grantId?: number;
   version: number;
+  pendingSourceChanges: number;
   inflight?: Promise<void>;
   ready?: Promise<void>;
 }
@@ -73,7 +74,7 @@ export class ProviderFrameController {
     const originalSource = frame.getAttribute("src");
     if (!originalSource) return;
 
-    const state: ProviderFrameState = { originalSource, version: 0 };
+    const state: ProviderFrameState = { originalSource, version: 0, pendingSourceChanges: 0 };
     this.states.set(frame, state);
     this.activeFrames.add(frame);
     state.ready = this.environment.prepare(frame);
@@ -100,13 +101,21 @@ export class ProviderFrameController {
     await this.loadAuthorized(frame, state, false);
   }
 
-  async trust(frame: HTMLIFrameElement): Promise<void> {
+  async trust(frame: HTMLIFrameElement, sourceChanges = 0): Promise<void> {
     let state = this.states.get(frame);
     const originalSource = frame.getAttribute("src");
     if (!originalSource) return;
+    const ownSourceChanges = state
+      ? Math.min(sourceChanges, state.pendingSourceChanges)
+      : 0;
+    if (state) state.pendingSourceChanges -= ownSourceChanges;
+    const pageSourceChanged = sourceChanges > ownSourceChanges;
     if (
       state &&
-      (originalSource === "about:blank" || originalSource === state.authorizedSource)
+      (
+        originalSource === "about:blank" ||
+        (originalSource === state.authorizedSource && !pageSourceChanged)
+      )
     ) {
       await state.inflight;
       return;
@@ -126,7 +135,7 @@ export class ProviderFrameController {
       }
       return;
     }
-    state = { originalSource, version: 0 };
+    state = { originalSource, version: 0, pendingSourceChanges: 0 };
     this.states.set(frame, state);
     this.activeFrames.add(frame);
     state.ready = this.environment.prepare(frame);
@@ -143,7 +152,7 @@ export class ProviderFrameController {
     previous.version += 1;
     await this.revoke(previous);
     if (this.states.get(frame) !== previous) return;
-    const state: ProviderFrameState = { originalSource, version: 0 };
+    const state: ProviderFrameState = { originalSource, version: 0, pendingSourceChanges: 0 };
     this.states.set(frame, state);
     state.ready = this.environment.prepare(frame);
     await state.ready;
@@ -198,9 +207,11 @@ export class ProviderFrameController {
     }
     state.grantId = authorization.grantId;
     state.authorizedSource = authorization.source;
+    state.pendingSourceChanges += 1;
     try {
       this.environment.navigate(frame, authorization.source);
     } catch (error) {
+      state.pendingSourceChanges -= 1;
       await this.revoke(state);
       throw error;
     }

@@ -14,6 +14,7 @@ import type { ProtectionHandle, ProtectionOptions } from "../../src/protection/r
 class FakeObserver implements DocumentObserverPort {
   readonly scan = vi.fn();
   readonly stop = vi.fn();
+  readonly sourceChangeCount = vi.fn((_element: Element) => 0);
   private callback: ((elements: readonly Element[]) => void) | null = null;
   start(callback: (elements: readonly Element[]) => void): void { this.callback = callback; }
   emit(elements: readonly Element[]): void { this.callback?.(elements); }
@@ -115,8 +116,25 @@ describe("ContentController", () => {
     });
     harness.observer.emit([frame]);
 
-    expect(harness.providerFrames.trust).toHaveBeenCalledWith(frame);
+    expect(harness.providerFrames.trust).toHaveBeenCalledWith(frame, 0);
     expect(harness.renderer.protect).not.toHaveBeenCalled();
+  });
+
+  it("passes source mutation counts when re-authorizing an unmatched provider", () => {
+    const frame = document.createElement("iframe");
+    frame.src = "https://www.youtube.com/embed/weather";
+    frame.title = "Weather report";
+    document.body.append(frame);
+    const harness = controllerHarness(new Map([[frame, candidate(frame, "video-iframe")]]));
+    harness.observer.sourceChangeCount.mockReturnValue(2);
+
+    harness.controller.start({
+      origin: "https://news.example",
+      blockedSubjects: { enabled: true, keywords: ["Trump"] },
+    });
+    harness.observer.emit([frame]);
+
+    expect(harness.providerFrames.trust).toHaveBeenCalledWith(frame, 2);
   });
 
   it("gates a matching provider before rendering and permits one reveal", () => {

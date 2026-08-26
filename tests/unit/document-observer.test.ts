@@ -174,6 +174,29 @@ describe("DocumentObserver", () => {
     ]);
   });
 
+  it("counts source mutations until their candidate batch is processed", async () => {
+    const frames = frameQueue();
+    const observer = new DocumentObserver({
+      ...frames.environment,
+      createResizeObserver: () => ({ observe: vi.fn(), disconnect: vi.fn() }),
+    });
+    const iframe = document.createElement("iframe");
+    document.body.append(iframe);
+    const counts: number[] = [];
+    observer.start((elements) => {
+      if (elements.includes(iframe)) counts.push(observer.sourceChangeCount(iframe));
+    });
+
+    iframe.setAttribute("src", "https://www.youtube.com/embed/one");
+    iframe.setAttribute("src", "https://www.youtube.com/embed/two");
+    iframe.className = "resized";
+    await deliverMutations();
+    frames.flush();
+
+    expect(counts).toEqual([2]);
+    expect(observer.sourceChangeCount(iframe)).toBe(0);
+  });
+
   it("scans ordinary HTML elements so externally styled backgrounds are candidates", () => {
     const frames = frameQueue();
     const observer = new DocumentObserver({

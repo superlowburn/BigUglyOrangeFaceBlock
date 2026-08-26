@@ -28,6 +28,7 @@ export interface DocumentObserverPort {
   scan(root: ParentNode): void;
   stop(): void;
   hadRelevantAttributeChange?(element: Element): boolean;
+  sourceChangeCount?(element: Element): number;
   trackLayout?(element: Element): void;
   untrackLayout?(element: Element): void;
 }
@@ -48,7 +49,7 @@ interface ProviderFramePort {
   release(frame: HTMLIFrameElement): void | Promise<void>;
   regate(frame: HTMLIFrameElement): void;
   restore(frame: HTMLIFrameElement): void | Promise<void>;
-  trust?(frame: HTMLIFrameElement): void | Promise<void>;
+  trust?(frame: HTMLIFrameElement, sourceChanges?: number): void | Promise<void>;
   forget?(frame: HTMLIFrameElement): void;
   dispose?(): void;
 }
@@ -215,7 +216,12 @@ export class ContentController {
         return;
       }
       if (detachedCandidate) this.restoreMedia(detachedCandidate);
-      if (isSupportedVideoFrame(element)) void this.providerFrames.trust?.(element);
+      if (isSupportedVideoFrame(element)) {
+        void this.providerFrames.trust?.(
+          element,
+          this.observer.sourceChangeCount?.(element) ?? 0,
+        );
+      }
     } catch {
       if (detachedCandidate) this.restoreMedia(detachedCandidate);
       this.reportCandidateFailure(element);

@@ -147,6 +147,9 @@ test("gates matched videos while releasing an ordinary provider embed", async ()
     await expect.poll(() => extension.providerRequests.some((request) =>
       new URL(request).pathname === "/embed/matched-subject"
     )).toBe(true);
+    expect(extension.providerRequests.every((request) =>
+      !new URL(request).searchParams.has("buof_grant")
+    )).toBe(true);
     await expect(matchedProvider).not.toHaveAttribute("data-buof-protected", "video");
   } finally {
     await extension.context.close();

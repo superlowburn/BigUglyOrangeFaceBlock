@@ -16,7 +16,6 @@ function authorization() {
     authorize: vi.fn(async (source: string, disableAutoplay: boolean) => {
       const url = new URL(source);
       if (disableAutoplay) url.searchParams.set("autoplay", "0");
-      url.searchParams.set("buof_grant", "unit-token");
       return { grantId: nextGrant++, source: url.href };
     }),
     revoke: vi.fn().mockResolvedValue(undefined),
@@ -82,7 +81,7 @@ describe("ProviderFrameController", () => {
       "https://www.youtube-nocookie.com/embed/abc123",
     );
     expect(released.searchParams.get("autoplay")).toBe("0");
-    expect(released.searchParams.get("buof_grant")).toBe("unit-token");
+    expect(released.searchParams.has("buof_grant")).toBe(false);
     expect(released.hash).toBe("#chapter");
   });
 
@@ -104,7 +103,7 @@ describe("ProviderFrameController", () => {
     expect(restored.origin + restored.pathname).toBe("https://player.vimeo.com/video/123456");
     expect(restored.searchParams.get("autopause")).toBe("0");
     expect(restored.searchParams.get("autoplay")).toBeNull();
-    expect(restored.searchParams.get("buof_grant")).toBe("unit-token");
+    expect(restored.searchParams.has("buof_grant")).toBe(false);
     expect(access.revoke).toHaveBeenCalled();
   });
 
@@ -120,11 +119,12 @@ describe("ProviderFrameController", () => {
       controller.trust(element),
       controller.trust(element),
     ]);
+    await controller.trust(element, 1);
     await controller.trust(element);
 
     expect(access.authorize).toHaveBeenCalledTimes(1);
     expect(browser.navigate).toHaveBeenCalledTimes(1);
-    expect(element.getAttribute("src")).toContain("buof_grant=unit-token");
+    expect(element.getAttribute("src")).not.toContain("buof_grant");
     expect(browser.prepare).toHaveBeenCalledTimes(1);
   });
 
@@ -141,7 +141,7 @@ describe("ProviderFrameController", () => {
     expect(access.authorize).toHaveBeenCalledTimes(2);
     expect(browser.navigate).toHaveBeenCalledTimes(2);
     expect(element.getAttribute("src")).toContain("https://player.vimeo.com/video/456");
-    expect(element.getAttribute("src")).toContain("buof_grant=unit-token");
+    expect(element.getAttribute("src")).not.toContain("buof_grant");
   });
 
   it("re-authorizes one Trusted iframe when the page resets its exact original source", async () => {
@@ -151,13 +151,14 @@ describe("ProviderFrameController", () => {
     const originalSource = "https://www.youtube.com/embed/first?autoplay=1";
     const element = frame(originalSource);
     await controller.trust(element);
+    await controller.trust(element, 1);
 
     let finishRevoke!: () => void;
     access.revoke.mockImplementationOnce(() => new Promise<void>((resolve) => {
       finishRevoke = resolve;
     }));
     element.setAttribute("src", originalSource);
-    const firstReload = controller.trust(element);
+    const firstReload = controller.trust(element, 1);
     const duplicateReload = controller.trust(element);
     await Promise.resolve();
     await Promise.resolve();
