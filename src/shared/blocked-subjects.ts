@@ -110,16 +110,15 @@ function subjectContext(element: HTMLElement): string {
     link.getAttribute("aria-label") ?? "",
     link.getAttribute("title") ?? "",
   );
-  const containers = new Set([
-    element.closest("figure, shreddit-post, [data-testid*='post']"),
-    element.closest("article"),
-  ]);
-  for (const container of containers) {
-    if (!container) continue;
-    values.push(...Array.from(container.querySelectorAll(
-      "h1, h2, h3, h4, figcaption, [slot='title'], [slot='post-title']",
-    )).map((node) => node.textContent ?? ""));
-  }
+  const localContainer = element.closest("figure, shreddit-post, [data-testid*='post']");
+  if (localContainer) values.push(...Array.from(localContainer.querySelectorAll(
+    "h1, h2, h3, h4, figcaption, [slot='title'], [slot='post-title']",
+  )).map((node) => node.textContent ?? ""));
+  const article = element.closest("article");
+  const articleHeading = article?.querySelector("h1") ?? article?.querySelector(
+    "h2, h3, h4, [slot='title'], [slot='post-title']",
+  );
+  if (articleHeading) values.push(articleHeading.textContent ?? "");
   return values.join(" ").replace(/\s+/gu, " ");
 }
 

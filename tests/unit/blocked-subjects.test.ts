@@ -43,6 +43,23 @@ describe("blocked subjects", () => {
     expect(matchesBlockedSubject(document.querySelector("img")!, defaultTrumpKeywords)).toBe(true);
   });
 
+  it("does not leak a subject from secondary headlines in the same article", () => {
+    document.body.innerHTML = `
+      <article>
+        <figure>
+          <img alt="Stella Parton and Dolly Parton at a conference">
+          <figcaption>Stella and Dolly Parton in Nashville</figcaption>
+        </figure>
+        <h1>Dolly Parton remembered by her sister</h1>
+        <aside>
+          <h2>Most viewed</h2>
+          <h3>Trump official faces inquiry</h3>
+        </aside>
+      </article>`;
+
+    expect(matchesBlockedSubject(document.querySelector("img")!, defaultTrumpKeywords)).toBe(false);
+  });
+
   it("matches a subject named only in the linked story URL", () => {
     const link = document.createElement("a");
     link.href = "/2026/08/21/politics/donald-trump-south-carolina-republicans";
